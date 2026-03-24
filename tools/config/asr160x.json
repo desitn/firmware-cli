@@ -1,0 +1,36 @@
+{
+  "platform": {
+    "type": "ad",
+    "extensions": [".zip"],
+    "description": "ASR 160X Series",
+    "autoDetect": {
+      "zipContains": ["download.json"]
+    },
+    "serial": {
+      "atPortPatterns": ["at port", "modem"],
+      "atCommand": "AT+QDOWNLOAD=1",
+      "baudrate": 115200,
+      "autoEnterDlMode": true,
+      "downloadPortPatterns": ["download"],
+      "downloadPortVidPid": [
+        { "vid": "2ECC", "pid": "3004", "desc": "BOOT" }
+      ]
+    },
+    "progressPatterns": {
+      "started": ["CONNECTING"],
+      "downloading": ["RUNNING"],
+      "completed": ["SUCCEEDED"],
+      "error": ["error", "timeout"]
+    },
+    "downloadDuration": 40000
+  },
+  "tool": {
+    "name": "adownload",
+    "path": "adownload.exe",
+    "description": "ASR 160X Download Tool",
+    "args": {
+      "flash": ["-r", "-q", "-a", "-u", "-s", "115200", "{firmwarePath}"],
+      "default": []
+    }
+  }
+}

@@ -142,14 +142,14 @@ function getProgressPatterns(toolType: string): ProgressPatterns {
   return platformConfig?.progressPatterns || {
     started: ['init', 'start', 'begin'],
     downloading: ['downloading', 'running', 'burning', 'flashing'],
-    completed: ['complete', 'success', 'finished'],
+    completed: ['complete', 'finished', 'succeeded'],
     error: ['error', 'fail', 'timeout']
   };
 }
 
 /**
- * Format download progress - unify different tool progress display
- * Reads matching patterns from config, returns status only (no progress bar)
+ * Format download progress - detect status from tool output
+ * Returns status string only, progress is managed separately
  * Only judges other states if "started" is not matched
  */
 function formatDownloadProgress(output: string, toolType: string, hasStartedRef: RefObject): string | null {
@@ -158,6 +158,7 @@ function formatDownloadProgress(output: string, toolType: string, hasStartedRef:
   let status: string | null = null;
   const lowerOutput = output.toLowerCase();
   
+  // Check for started patterns
   for (const pattern of patterns.started) {
     if (lowerOutput.includes(pattern.toLowerCase())) {
       status = '[STARTED]';
@@ -170,6 +171,7 @@ function formatDownloadProgress(output: string, toolType: string, hasStartedRef:
     return null;
   }
   
+  // Check for downloading patterns
   if (!status) {
     for (const pattern of patterns.downloading) {
       if (lowerOutput.includes(pattern.toLowerCase())) {
@@ -179,6 +181,7 @@ function formatDownloadProgress(output: string, toolType: string, hasStartedRef:
     }
   }
   
+  // Check for completed patterns
   if (!status) {
     for (const pattern of patterns.completed) {
       if (lowerOutput.includes(pattern.toLowerCase())) {
@@ -188,6 +191,7 @@ function formatDownloadProgress(output: string, toolType: string, hasStartedRef:
     }
   }
   
+  // Check for error patterns
   if (!status) {
     for (const pattern of patterns.error) {
       if (lowerOutput.includes(pattern.toLowerCase())) {
@@ -197,11 +201,16 @@ function formatDownloadProgress(output: string, toolType: string, hasStartedRef:
     }
   }
   
-  if (status) {
-    return `\n${status}`;
-  }
-  
-  return null;
+  return status ? `\r${status}` : null;
+}
+
+/**
+ * Create a simple progress bar
+ */
+function createProgressBar(percentage: number, width: number = 20): string {
+  const filled = Math.round((percentage / 100) * width);
+  const empty = width - filled;
+  return '[' + '='.repeat(filled) + ' '.repeat(empty) + ']';
 }
 
 /**
@@ -252,8 +261,120 @@ async function executeFlash(toolPath: string, toolType: string, firmwareFile: st
     const logFile = path.join(process.cwd(), 'frimware-cli-tool.log');
     const logStream = fs.createWriteStream(logFile, { flags: 'w' });
     
-    let lastStatus = '';
     const hasStartedRef: RefObject = { value: false };
+    
+    // Get output configuration
+    const config = loadToolsConfig();
+    const outputConfig = config.outputConfig || { progressMode: 'single-line', verbose: false, timestamp: false };
+    
+    // Progress tracking - stage-based pseudo progress
+    let currentProgress = 0;
+    let currentStatus = 'idle';
+    let progressInterval: NodeJS.Timeout | null = null;
+    let stageStartTime = Date.now();
+    
+    // State machine: define state order for linear progression only
+    const stateOrder: Record<string, number> = {
+      'idle': 0,
+      'started': 1,
+      'downloading': 2,
+      'completed': 3,
+      'error': 99
+    };
+    
+    // Check if state transition is allowed (only forward progression)
+    const canTransitionTo = (newStatus: string): boolean => {
+      const currentOrder = stateOrder[currentStatus] ?? -1;
+      const newOrder = stateOrder[newStatus] ?? -1;
+      return newOrder > currentOrder;
+    };
+    
+    // Auto-start progress when flash begins (don't wait for tool output)
+    // This ensures progress bar shows immediately
+    setTimeout(() => {
+      if (!hasStartedRef.value && !downloadComplete) {
+        hasStartedRef.value = true;
+        currentStatus = 'started';
+        startStageProgress('started');
+      }
+    }, 100);
+    
+    // Get download duration from platform config, default to 30 seconds
+    const platformKeyForDuration = Object.keys(config.platforms || {}).find(
+      key => config.platforms[key].type === toolType
+    );
+    const platformDuration = platformKeyForDuration 
+      ? config.platforms[platformKeyForDuration].downloadDuration 
+      : undefined;
+    const downloadDuration = platformDuration || 30000; // Default 30 seconds
+    
+    // Stage configuration: each stage has a fixed progress range
+    const stageConfig: Record<string, { min: number; max: number; duration: number }> = {
+      'started': { min: 0, max: 5, duration: 5000 },        // 0-5% in 5 seconds
+      'downloading': { min: 5, max: 95, duration: downloadDuration },  // 5-95% in configured duration
+      'completed': { min: 95, max: 100, duration: 3000 },   // 95-100% in 3 seconds
+      'error': { min: 0, max: 0, duration: 0 }
+    };
+    
+    // Start progress simulation for current stage
+    const startStageProgress = (stage: string) => {
+      if (progressInterval) {
+        clearInterval(progressInterval);
+      }
+      
+      const config = stageConfig[stage];
+      if (!config || config.duration === 0) {
+        return;
+      }
+      
+      stageStartTime = Date.now();
+      currentProgress = config.min;
+      
+      // Update immediately
+      outputProgress(currentProgress, currentStatus, outputConfig.progressMode);
+      
+      // Start interval to update progress within the stage
+      progressInterval = setInterval(() => {
+        if (downloadComplete) {
+          return;
+        }
+        
+        const elapsed = Date.now() - stageStartTime;
+        const progress = Math.min(1, elapsed / config.duration);
+        const newProgress = config.min + (config.max - config.min) * progress;
+        
+        if (newProgress > currentProgress) {
+          currentProgress = newProgress;
+          outputProgress(currentProgress, currentStatus, outputConfig.progressMode);
+        }
+      }, 200); // Update every 200ms for smooth animation
+    };
+    
+    // Output progress based on mode
+    const outputProgress = (progress: number, status: string, mode: string) => {
+      const progressInt = Math.floor(progress);
+      const progressBar = createProgressBar(progressInt);
+      const statusText = getStatusText(status);
+      
+      if (mode === 'single-line') {
+        process.stdout.write(`\r${progressBar} ${progressInt}% ${statusText}`);
+      } else {
+        // multi-line mode
+        const timestamp = outputConfig.timestamp ? `[${new Date().toISOString()}] ` : '';
+        console.log(`${timestamp}Progress: ${progressInt}% ${statusText}`);
+      }
+    };
+    
+    // Get status text
+    const getStatusText = (status: string): string => {
+      switch (status) {
+        case 'started': return 'Initializing...';
+        case 'downloading': return 'Downloading...';
+        case 'completed': return 'Completed!';
+        case 'error': return 'Error!';
+        default: return '';
+      }
+    };
     
     const stdoutRl = readline.createInterface({
       input: child.stdout,
@@ -271,19 +392,46 @@ async function executeFlash(toolPath: string, toolType: string, firmwareFile: st
       const timestamp = new Date().toISOString();
       logStream.write(`[${timestamp}] ${output}\n`);
 
+      // Parse output to determine status
       const progress = formatDownloadProgress(output, toolType, hasStartedRef);
       
+      // Handle status detection and timeout clearing
       if (progress && !downloadComplete) {
-        clearTimeout(timeout);
-        downloadComplete = true;
+        const statusMatch = progress.match(/\[(\w+)\]/);
+        if (statusMatch) {
+          const detectedStatus = statusMatch[1].toLowerCase();
+          
+          // Clear timeout when download starts (started or downloading)
+          // This prevents false timeout during long downloads
+          if (detectedStatus === 'started' || detectedStatus === 'downloading') {
+            clearTimeout(timeout);
+          }
+          
+          // Mark as complete only when finished or error
+          if (detectedStatus === 'completed' || detectedStatus === 'error') {
+            downloadComplete = true;
+          }
+        }
       }
       
+      // Update status based on output (with state machine - only forward progression)
       if (progress) {
-        const currentStatus = progress.trim();
-        if (currentStatus !== lastStatus) {
-          process.stdout.write(progress);
-          lastStatus = currentStatus;
+        const statusMatch = progress.match(/\[(\w+)\]/);
+        if (statusMatch) {
+          const newStatus = statusMatch[1].toLowerCase();
+          // Only allow state transition if it's forward progression
+          if (newStatus !== currentStatus && canTransitionTo(newStatus)) {
+            currentStatus = newStatus;
+            
+            // Start progress simulation for the new stage
+            startStageProgress(currentStatus);
+          }
         }
+      }
+      
+      // Verbose output
+      if (outputConfig.verbose) {
+        console.log(output);
       }
     });
     
@@ -307,17 +455,38 @@ async function executeFlash(toolPath: string, toolType: string, firmwareFile: st
     
     child.on('close', (code: number | null) => {
       clearTimeout(timeout);
-      logStream.end(`\n[Process exited, exit code: ${code}]\n`);
+      
+      // Stop progress simulation
+      if (progressInterval) {
+        clearInterval(progressInterval);
+      }
+      
+      // Set final progress
       if (code === 0) {
+        currentProgress = 100;
+        currentStatus = 'completed';
+        outputProgress(100, 'completed', outputConfig.progressMode);
         console.log('\nDownload process exited successfully');
         resolve();
       } else {
+        currentStatus = 'error';
+        outputProgress(currentProgress, 'error', outputConfig.progressMode);
         reject(new Error(`Download process failed, exit code: ${code}`));
       }
+      
+      logStream.end(`\n[Process exited, exit code: ${code}]\n`);
     });
     
     child.on('error', (error: Error) => {
       clearTimeout(timeout);
+      
+      // Stop progress simulation
+      if (progressInterval) {
+        clearInterval(progressInterval);
+      }
+      
+      currentStatus = 'error';
+      outputProgress(currentProgress, 'error', outputConfig.progressMode);
       reject(new Error(`Failed to start download process: ${error.message}`));
     });
   });

@@ -174,7 +174,9 @@ firmware-cli.exe config set defaultComPort "COM107"
 firmware-cli.exe help
 ```
 
-## Configuration File
+## Configuration Files
+
+### Project Configuration
 
 Create `firmware-cli.json` in your project root:
 
@@ -194,6 +196,72 @@ Create `firmware-cli.json` in your project root:
 | `buildGitBashPath` | Path to Git Bash executable | System PATH |
 | `defaultComPort` | Default serial port for monitoring | None |
 
+### Tool Configuration
+
+Tool configurations are stored in `tools/config/` directory with the following structure:
+
+```
+tools/config/
+├── global.json           # Global settings and serial configuration
+├── asr160x.json         # ASR 160X platform configuration
+├── asr1x03.json         # ASR 180X/190X platform configuration
+├── unisoc.json          # UNISOC platform configuration
+├── eigen.json           # Eigen platform configuration
+└── esp.json             # ESP platform configuration
+```
+
+Each platform configuration file contains:
+- **platform**: Platform-specific settings (extensions, serial config, progress patterns)
+- **tool**: Download tool configuration (name, path, arguments)
+
+Example (`tools/config/asr160x.json`):
+```json
+{
+  "platform": {
+    "type": "ad",
+    "extensions": [".zip"],
+    "description": "ASR 160X Series",
+    "serial": {
+      "atPortPatterns": ["at port", "modem"],
+      "atCommand": "AT+QDOWNLOAD=1",
+      "baudrate": 115200,
+      "autoEnterDlMode": true,
+      "downloadPortPatterns": ["download"],
+      "downloadPortVidPid": [
+        { "vid": "2ECC", "pid": "3004", "desc": "BOOT" }
+      ]
+    },
+    "progressPatterns": {
+      "started": ["CONNECTING"],
+      "downloading": ["RUNNING"],
+      "completed": ["SUCCEEDED"],
+      "error": ["error", "timeout"]
+    }
+  },
+  "tool": {
+    "name": "adownload",
+    "path": "adownload.exe",
+    "description": "ASR 160X Download Tool",
+    "args": {
+      "flash": ["-r", "-q", "-a", "-u", "-s", "115200", "{firmwarePath}"],
+      "default": []
+    }
+  }
+}
+```
+
+### Adding New Platform Support
+
+To add support for a new chip platform:
+
+1. Create a new JSON file in `tools/config/` (e.g., `newplatform.json`)
+2. Define the platform configuration with:
+   - `platform.type`: Tool type identifier
+   - `platform.extensions`: Supported file extensions
+   - `platform.serial`: Serial port configuration
+   - `tool`: Download tool configuration (if applicable)
+3. Place the download tool executable in `tools/` directory
+
 ## Supported Firmware Types
 
 | Platform | Chip Models | File Extension | Description |
@@ -202,6 +270,48 @@ Create `firmware-cli.json` in your project root:
 | **ASR** | 180X/190X | `*_fbf.bin` | ASR FBF format |
 | **UNISOC** | 8310/8910/8850 | `*.pac` | UNISOC PAC format |
 | **Eigen** | 618/718 | `*_download_usb.ini` | Eigen ECF format |
+
+## Progress Display Options
+
+The firmware flash tool supports two progress display modes:
+
+### Single-line Mode (Default)
+- Uses `\r` to update the same line
+- Suitable for terminal user interaction
+- Display: `[====================] 50% Downloading...`
+
+### Multi-line Mode
+- Outputs new line for each update
+- Suitable for UI program parsing
+- Display:
+  ```
+  [2024-01-15 14:30:25] Progress: 50%
+  [2024-01-15 14:30:26] Progress: 51%
+  ```
+
+### Configuration
+
+Set progress mode in `tools/config/global.json`:
+
+```json
+{
+  "outputConfig": {
+    "progressMode": "single-line", // "single-line" or "multi-line"
+    "verbose": false,
+    "timestamp": false
+  }
+}
+```
+
+### Command Line Options
+
+```bash
+# Single-line mode (default)
+firmware-cli.exe flash --progress single-line
+
+# Multi-line mode
+firmware-cli.exe flash --progress multi-line
+```
 
 ## Serial Monitoring Options
 
@@ -233,7 +343,8 @@ Create `firmware-cli.json` in your project root:
 
 ### "Download tool not found"
 - Verify `tools/` directory exists and contains required executables
-- Check `tools/tools-config.json` for correct tool paths
+- Check `tools/config/` directory for platform configuration files
+- Verify tool path in platform configuration (e.g., `tools/config/asr160x.json`)
 
 ### "Build command not found"
 - Configure build command: `firmware-cli.exe config set buildCommand "build_OPTfile.bat"`
@@ -262,7 +373,13 @@ firmware-cli/
 │   ├── utils.ts           # Utility functions
 │   └── types/             # TypeScript type definitions
 ├── tools/                 # Download tools and config
-│   ├── tools-config.json  # Platform/tool configuration
+│   ├── config/            # Platform configurations
+│   │   ├── global.json    # Global settings
+│   │   ├── asr160x.json   # ASR 160X platform
+│   │   ├── asr1x03.json   # ASR 180X/190X platform
+│   │   ├── unisoc.json    # UNISOC platform
+│   │   ├── eigen.json     # Eigen platform
+│   │   └── esp.json       # ESP platform
 │   ├── adownload.exe      # ASR 160X tool
 │   ├── FBFDownloader.exe  # ASR 180X/190X tool
 │   └── pacdownload/       # UNISOC tools

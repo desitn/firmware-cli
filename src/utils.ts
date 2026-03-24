@@ -19,40 +19,100 @@ import type {
 let toolsConfigCache: ToolsConfig | null = null;
 
 /**
- * Load tools configuration file
+ * Load JSON file
  */
-export function loadToolsConfig(): ToolsConfig {
-  if (toolsConfigCache) {
+function loadJsonFile<T>(filePath: string): T | null {
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+  
+  try {
+    const data = fs.readFileSync(filePath, 'utf8');
+    return JSON.parse(data) as T;
+  } catch (error) {
+    const err = error as Error;
+    console.error(`Failed to parse config file ${filePath}:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Get config directory path
+ */
+export function getConfigPath(): string {
+  const toolsDir = getToolsPath();
+  const configDir = path.join(toolsDir, 'config');
+  
+  if (!fs.existsSync(configDir)) {
+    throw new Error('Config directory not found: ' + configDir);
+  }
+  
+  return configDir;
+}
+
+/**
+ * Load tools configuration file
+ * @param forceReload - Force reload from disk (bypass cache)
+ */
+export function loadToolsConfig(forceReload: boolean = false): ToolsConfig {
+  if (toolsConfigCache && !forceReload) {
     return toolsConfigCache;
   }
   
-  const toolsDir = getToolsPath();
-  const configPath = path.join(toolsDir, 'tools-config.json');
+  const configDir = getConfigPath();
   
-  if (fs.existsSync(configPath)) {
-    try {
-      const configData = fs.readFileSync(configPath, 'utf8');
-      const config: ToolsConfig = JSON.parse(configData);
-      toolsConfigCache = config;
-      return config;
-    } catch (error) {
-      const err = error as Error;
-      console.error('Failed to parse tools config file:', err.message);
+  // Load global config
+  const globalConfigPath = path.join(configDir, 'global.json');
+  const globalConfig = loadJsonFile<{
+    version: string;
+    description: string;
+    settings: GlobalSettings;
+    serial?: any;
+  }>(globalConfigPath);
+  
+  if (!globalConfig) {
+    throw new Error('Global config file not found: ' + globalConfigPath);
+  }
+  
+  // Load all platform configs
+  const platforms: Record<string, PlatformConfig> = {};
+  const tools: Record<string, ToolConfig> = {};
+  
+  const files = fs.readdirSync(configDir);
+  for (const file of files) {
+    if (file === 'global.json' || !file.endsWith('.json')) {
+      continue;
+    }
+    
+    const platformConfigPath = path.join(configDir, file);
+    const platformConfigData = loadJsonFile<{
+      platform: PlatformConfig;
+      tool: ToolConfig | null;
+    }>(platformConfigPath);
+    
+    if (platformConfigData && platformConfigData.platform) {
+      const platformKey = file.replace('.json', '');
+      platforms[platformKey] = platformConfigData.platform;
+      
+      if (platformConfigData.tool) {
+        tools[platformConfigData.platform.type] = platformConfigData.tool;
+      }
     }
   }
   
-  // Return default configuration
-  return {
-    version: '1.0.0',
-    description: '',
-    tools: {},
-    platforms: {},
-    settings: {
-      defaultPort: 'auto',
-      timeout: 300,
-      retryCount: 3
-    }
+  // Build final config
+  const config: ToolsConfig = {
+    version: globalConfig.version,
+    description: globalConfig.description,
+    tools,
+    platforms,
+    settings: globalConfig.settings,
+    serial: globalConfig.serial,
+    outputConfig: (globalConfig as any).outputConfig
   };
+  
+  toolsConfigCache = config;
+  return config;
 }
 
 /**

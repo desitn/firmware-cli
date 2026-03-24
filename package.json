@@ -8,7 +8,8 @@
     "test": "ts-node src/index.ts help",
     "build": "tsc",
     "build:watch": "tsc --watch",
-    "build:exe": "npm run build && pkg . --targets node18-win-x64 --output ./firmware-cli.exe",
+    "build:exe": "npm run build && pkg . --targets node18-win-x64 --output ./firmware-cli.exe && npm run sync-dist",
+    "sync-dist": "robocopy tools skill\\firmware-cli\\scripts\\tools /E /MIR && copy firmware-cli.exe skill\\firmware-cli\\scripts\\ /Y && copy firmware-cli.json skill\\firmware-cli\\scripts\\ /Y",
     "dev": "ts-node src/index.ts",
     "clean": "rimraf dist"
   },

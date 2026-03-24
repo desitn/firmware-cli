@@ -52,6 +52,7 @@ export interface PlatformConfig {
   };
   serial?: PlatformSerialConfig;
   progressPatterns?: ProgressPatterns;
+  downloadDuration?: number;
 }
 
 /**
@@ -61,6 +62,15 @@ export interface GlobalSettings {
   defaultPort: string;
   timeout: number;
   retryCount: number;
+}
+
+/**
+ * Output configuration
+ */
+export interface OutputConfig {
+  progressMode: 'single-line' | 'multi-line';
+  verbose: boolean;
+  timestamp: boolean;
 }
 
 /**
@@ -83,6 +93,7 @@ export interface ToolsConfig {
   platforms: Record<string, PlatformConfig>;
   settings: GlobalSettings;
   serial?: SerialSettings;
+  outputConfig?: OutputConfig;
 }
 
 /**
