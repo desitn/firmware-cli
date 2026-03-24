@@ -1,6 +1,6 @@
 ---
 name: firmware-cli
-description: 嵌入式固件编译和烧录 CLI 工具，支持 ASR/UNISOC/Eigen 芯片平台的固件下载、编译、设备管理。当用户需要烧录固件、编译工程、检查设备时自动使用。
+description: 嵌入式固件编译和烧录 CLI 工具，支持 ASR/UNISOC/Eigen 芯片平台的固件下载、编译、设备管理。需要烧录固件、编译工程、检查设备时使用。
 ---
 
 # Firmware CLI 工具
@@ -43,6 +43,7 @@ scripts\init.bat
 - "编译并烧录" / "编译和下载" / "build and flash"
 - "列出固件" / "有哪些固件"
 - "调试输出" / "监控串口" / "查看串口日志" / "串口监控" / "monitor serial"
+- "发送 AT 命令" / "AT 指令" / "查询版本" / "设备复位" / "AT 命令" / "AT command"
 
 ## 核心命令
 
@@ -69,10 +70,28 @@ firmware-cli.exe build-and-flash
 firmware-cli.exe config
 firmware-cli.exe config set firmwarePath "C:/firmwares"
 
-# 串口监控
-firmware-cli.exe monitor -p COM3
+# 串口监控（所有示例都添加超时防止卡住，可根据具体场景调整）
+firmware-cli.exe monitor -p COM3 --timeout 30000
 firmware-cli.exe monitor -p COM3 --timeout 10000 -o log.txt
-firmware-cli.exe monitor -p COM3 --include "ERROR" --json
+firmware-cli.exe monitor -p COM3 --include "ERROR" --json --timeout 30000
+
+# AT 命令交互（用于调试和控制设备）
+# 自动查找 AT 端口并发送命令
+firmware-cli.exe at -c "ATI"
+
+# 指定端口发送命令
+firmware-cli.exe at -p COM107 -c "AT+CGMI"
+
+# 查询版本信息（多个命令）
+firmware-cli.exe at -c "ATI"
+firmware-cli.exe at -c "AT+GMI"
+firmware-cli.exe at -c "AT+GMM"
+
+# 模块复位（可能需要更长时间）
+firmware-cli.exe at -c "AT+CFUN=1,1" --timeout 10000
+
+# JSON 格式输出（适合 agent 解析）
+firmware-cli.exe at -c "ATI" --json
 ```
 
 ## 支持的固件类型
@@ -91,16 +110,17 @@ firmware-cli.exe monitor -p COM3 --include "ERROR" --json
 ### 基础用法
 
 ```bash
-# 监控指定串口（默认 115200 波特率）
-firmware-cli.exe monitor -p COM3
 
 # 不指定端口时使用配置的默认串口
-firmware-cli.exe monitor
+firmware-cli.exe monitor 
 
-# 指定波特率
-firmware-cli.exe monitor -p COM3 -b 9600
+# 监控指定串口 超时 30 秒
+firmware-cli.exe monitor -p COM3 --timeout 30000
 
-# 设置超时时间（毫秒）
+# 指定波特率，超时 30 秒
+firmware-cli.exe monitor -p COM3 -b 9600 --timeout 30000
+
+# 设置超时时间（毫秒），示例 5 秒可根据场景调整
 firmware-cli.exe monitor -p COM3 --timeout 5000
 ```
 
@@ -122,59 +142,59 @@ firmware-cli.exe monitor -p COM3 --timeout 5000
 ### 输出选项
 
 ```bash
-# 保存到文件，保存日志文件 单独文件夹存储，相同类型测试记得删除旧的日志
-firmware-cli.exe monitor -p COM3 -o output.log
+# 保存到文件，保存日志文件 单独文件夹存储，相同类型测试记得删除旧的日志，超时 60 秒可根据场景调整
+firmware-cli.exe monitor -p COM3 -o output.log --timeout 60000
 
-# 追加到文件（不覆盖）
-firmware-cli.exe monitor -p COM3 -o output.log --append
+# 追加到文件（不覆盖），超时 60 秒
+firmware-cli.exe monitor -p COM3 -o output.log --append --timeout 60000
 
-# 添加时间戳
-firmware-cli.exe monitor -p COM3 --timestamp -o log.txt
+# 添加时间戳，超时 60 秒
+firmware-cli.exe monitor -p COM3 --timestamp -o log.txt --timeout 60000
 
-# JSON 输出（适合程序解析）
+# JSON 输出（适合程序解析），超时 3 秒
 firmware-cli.exe monitor -p COM3 --json --timeout 3000
 ```
 
 ### 过滤功能
 
 ```bash
-# 只显示包含 "ERROR" 的行
-firmware-cli.exe monitor -p COM3 --include "ERROR"
+# 只显示包含 "ERROR" 的行，超时 30 秒
+firmware-cli.exe monitor -p COM3 --include "ERROR" --timeout 30000
 
-# 排除包含 "DEBUG" 的行
-firmware-cli.exe monitor -p COM3 --exclude "DEBUG"
+# 排除包含 "DEBUG" 的行，超时 30 秒
+firmware-cli.exe monitor -p COM3 --exclude "DEBUG" --timeout 30000
 
-# 组合使用
-firmware-cli.exe monitor -p COM3 --include "ERR" --exclude "INFO"
+# 组合使用，超时 30 秒
+firmware-cli.exe monitor -p COM3 --include "ERR" --exclude "INFO" --timeout 30000
 ```
 
 ### 退出条件
 
 ```bash
-# 捕获指定行数后退出
-firmware-cli.exe monitor -p COM3 --lines 100
+# 捕获指定行数后退出，超时 30 秒
+firmware-cli.exe monitor -p COM3 --lines 100 --timeout 30000
 
-# 匹配到指定内容后退出
-firmware-cli.exe monitor -p COM3 --until "Boot complete"
+# 匹配到指定内容后退出，超时 60 秒
+firmware-cli.exe monitor -p COM3 --until "Boot complete" --timeout 60000
 
-# 使用正则表达式匹配退出
-firmware-cli.exe monitor -p COM3 --until-regex "Error:.*Code"
+# 使用正则表达式匹配退出，超时 60 秒
+firmware-cli.exe monitor -p COM3 --until-regex "Error:.*Code" --timeout 60000
 ```
 
 ### 常用组合示例
 
 ```bash
-# 使用默认串口监控并保存带时间戳的日志
-firmware-cli.exe monitor --timestamp -o boot.log
+# 使用默认串口监控并保存带时间戳的日志，超时 60 秒
+firmware-cli.exe monitor --timestamp -o boot.log --timeout 60000
 
-# 使用默认串口只捕获错误并保存
-firmware-cli.exe monitor --include "ERR|FAIL" -o errors.log
+# 使用默认串口只捕获错误并保存，超时 60 秒
+firmware-cli.exe monitor --include "ERR|FAIL" -o errors.log --timeout 60000
 
-# JSON 格式输出，捕获 50 行
-firmware-cli.exe monitor -p COM107 --lines 50 --json
+# JSON 格式输出，捕获 50 行，超时 30 秒
+firmware-cli.exe monitor -p COM107 --lines 50 --json --timeout 30000
 
-# 监控直到出现特定日志
-firmware-cli.exe monitor -p COM107 --until "System ready" -o startup.log
+# 监控直到出现特定日志，超时 60 秒
+firmware-cli.exe monitor -p COM107 --until "System ready" -o startup.log --timeout 60000
 ```
 
 ### 输出字段说明（JSON 模式）

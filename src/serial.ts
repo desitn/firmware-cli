@@ -312,6 +312,25 @@ export async function sendATCommand(
 }
 
 /**
+ * Send AT command with enhanced result for CLI
+ */
+export async function sendATCommandCLI(
+  portPath: string,
+  command: string,
+  timeout: number = 5000
+): Promise<ATCommandResult & { port: string; duration: number }> {
+  const startTime = Date.now();
+  const result = await sendATCommand(portPath, command, timeout);
+  const duration = Date.now() - startTime;
+  
+  return {
+    ...result,
+    port: portPath,
+    duration
+  };
+}
+
+/**
  * Enter download mode
  */
 export async function enterDownloadMode(

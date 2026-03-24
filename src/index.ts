@@ -4,7 +4,7 @@ import { flashFirmware, listDevices } from './flash';
 import { listFirmware } from './list';
 import { compileFirmware, setConfig, showConfig } from './compile';
 import { loadToolsConfig, loadConfig } from './utils';
-import { showSerialList, openAndMonitorPort } from './serial';
+import { showSerialList, openAndMonitorPort, sendATCommandCLI, findATPort } from './serial';
 import type { MonitorOptions, CLIConfig } from './types';
 
 /**
@@ -61,6 +61,12 @@ Commands:
     --lines <n>         Capture n lines then exit
     --json              Output results in JSON format
     --timestamp         Add timestamp to each line
+  at [options]          Send AT command and get response
+    -c, --command <cmd> AT command to send (required)
+    -p, --port <port>   Serial port (auto-detect if not specified)
+    -t, --timeout <ms>  Set timeout in milliseconds (default 5000)
+    --platform <type>   Platform for auto-detect (default asr160x)
+    --json              Output results in JSON format
   build [command]       Compile firmware
   build-and-flash       Compile and flash latest firmware
   config                Show current configuration
@@ -79,6 +85,10 @@ Examples:
   firmware-cli.exe monitor -p COM9 --until "Done" -o boot.log
   firmware-cli.exe monitor -p COM9 --lines 100 -o debug.log
   firmware-cli.exe monitor -p COM9 --json --timeout 5000
+  firmware-cli.exe at -c "ATI"
+  firmware-cli.exe at -p COM107 -c "AT+CGMI"
+  firmware-cli.exe at -c "AT+CFUN=1,1" --timeout 10000
+  firmware-cli.exe at -c "ATI" --json
 
 Configuration file:
   firmware-cli.json (in project root directory)
@@ -138,6 +148,39 @@ function parseMonitorArgs(args: string[]): { portPath: string; options: Partial<
 }
 
 /**
+ * Parse command line arguments for AT command
+ */
+function parseATArgs(args: string[]): { 
+  portPath: string | null; 
+  command: string; 
+  timeout: number; 
+  platform: string; 
+  json: boolean;
+} {
+  const getArgValue = (short: string | null, long: string): string | null => {
+    const index = args.findIndex(arg => arg === short || arg === long);
+    return index !== -1 ? args[index + 1] : null;
+  };
+  
+  const hasFlag = (short: string | null, long: string): boolean => {
+    return args.includes(short || '') || args.includes(long);
+  };
+  
+  const command = getArgValue('-c', '--command');
+  if (!command) {
+    throw new Error('AT command is required. Use -c or --command to specify (e.g., -c "ATI")');
+  }
+  
+  return {
+    portPath: getArgValue('-p', '--port'),
+    command,
+    timeout: parseInt(getArgValue('-t', '--timeout') || '') || 5000,
+    platform: getArgValue(null, '--platform') || 'asr160x',
+    json: hasFlag(null, '--json')
+  };
+}
+
+/**
  * Main function
  */
 async function main(): Promise<number> {
@@ -164,6 +207,51 @@ async function main(): Promise<number> {
       case 'monitor': {
         const { portPath, options } = parseMonitorArgs(args);
         await openAndMonitorPort(portPath, options);
+        return 0;
+      }
+      case 'at': {
+        const { portPath, command, timeout, platform, json } = parseATArgs(args);
+        
+        let actualPortPath = portPath;
+        let portSource = 'user_input';
+        
+        if (!actualPortPath) {
+          const atPort = await findATPort(platform);
+          if (atPort) {
+            actualPortPath = atPort.path;
+            portSource = 'auto_detect';
+          }
+        }
+        
+        if (!actualPortPath) {
+          throw new Error('Please specify serial port with -p (e.g., -p COM107), or use --platform to auto-detect AT port');
+        }
+        
+        if (portSource === 'auto_detect' && !json) {
+          console.log(`\nAuto-detected AT port: ${actualPortPath}\n`);
+        }
+        
+        const result = await sendATCommandCLI(actualPortPath, command, timeout);
+        
+        if (json) {
+          console.log(JSON.stringify(result, null, 2));
+        } else {
+          console.log(`AT Command Result`);
+          console.log('='.repeat(50));
+          console.log(`Port: ${result.port}`);
+          console.log(`Command: ${command}`);
+          console.log(`Duration: ${result.duration}ms`);
+          console.log(`\nResponse:\n${result.response}`);
+          
+          if (result.success === true) {
+            console.log('\nStatus: OK');
+          } else if (result.success === false) {
+            console.log('\nStatus: ERROR');
+          } else if (result.timeout) {
+            console.log('\nStatus: TIMEOUT');
+          }
+        }
+        
         return 0;
       }
       case 'build':

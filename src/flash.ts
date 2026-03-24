@@ -160,7 +160,7 @@ function formatDownloadProgress(output: string, toolType: string, hasStartedRef:
   
   for (const pattern of patterns.started) {
     if (lowerOutput.includes(pattern.toLowerCase())) {
-      status = '📥 Started';
+      status = '[STARTED]';
       hasStartedRef.value = true;
       break;
     }
@@ -173,7 +173,7 @@ function formatDownloadProgress(output: string, toolType: string, hasStartedRef:
   if (!status) {
     for (const pattern of patterns.downloading) {
       if (lowerOutput.includes(pattern.toLowerCase())) {
-        status = '📥 Downloading';
+        status = '[DOWNLOADING]';
         break;
       }
     }
@@ -182,7 +182,7 @@ function formatDownloadProgress(output: string, toolType: string, hasStartedRef:
   if (!status) {
     for (const pattern of patterns.completed) {
       if (lowerOutput.includes(pattern.toLowerCase())) {
-        status = '✅ Completed';
+        status = '[COMPLETED]';
         break;
       }
     }
@@ -191,7 +191,7 @@ function formatDownloadProgress(output: string, toolType: string, hasStartedRef:
   if (!status) {
     for (const pattern of patterns.error) {
       if (lowerOutput.includes(pattern.toLowerCase())) {
-        status = '❌ Error';
+        status = '[ERROR]';
         break;
       }
     }
