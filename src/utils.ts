@@ -295,22 +295,13 @@ export function getProjectRoot(): string {
 
 /**
  * Find workspace path
+ * Priority: 1. Config file workspacePath 2. Config file firmwarePath parent 3. Current directory search
  */
 export function findWorkspacePath(): string | null {
-  const currentDir = process.cwd();
-  
-  // Check if current directory is workspace
-  if (fs.existsSync(path.join(currentDir, 'quectel_build'))) {
-    return currentDir;
-  }
-  
-  // Search upwards
-  let dir = currentDir;
-  while (dir !== path.dirname(dir)) {
-    if (fs.existsSync(path.join(dir, 'quectel_build'))) {
-      return dir;
-    }
-    dir = path.dirname(dir);
+  // First, try to get workspace path from config file
+  const config = loadConfig();
+  if (config.workspacePath && fs.existsSync(config.workspacePath)) {
+    return config.workspacePath;
   }
   
   return null;
@@ -497,8 +488,22 @@ export function determineFirmwareType(fileOrPath: string): FirmwareTypeResult {
 
 /**
  * Load configuration file
+ * Priority: 1. Environment variable FIRMWARE_CLI_CONFIG 2. Current working directory
  */
 export function loadConfig(): CLIConfig {
+  // First, try to get config path from environment variable
+  const envConfigPath = process.env.FIRMWARE_CLI_CONFIG;
+  if (envConfigPath && fs.existsSync(envConfigPath)) {
+    try {
+      const configData = fs.readFileSync(envConfigPath, 'utf8');
+      return JSON.parse(configData);
+    } catch (error) {
+      const err = error as Error;
+      console.error('Failed to parse config file from env:', err.message);
+    }
+  }
+  
+  // Second, try current working directory
   const configPathWithDot = path.join(process.cwd(), 'firmware-cli.json');
   if (fs.existsSync(configPathWithDot)) {
     try {

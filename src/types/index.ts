@@ -138,6 +138,7 @@ export interface CLIConfig {
   buildCommand?: string;
   buildGitBashPath?: string;
   defaultComPort?: string;
+  workspacePath?: string;
 }
 
 /**
