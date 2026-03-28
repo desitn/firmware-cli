@@ -15,7 +15,8 @@ import {
   isWindows,
   determineFirmwareType,
   killProcessTree,
-  executeCommand
+  executeCommand,
+  findWorkspacePath
 } from './utils';
 import { enterDownloadMode, findDownloadPort } from './serial';
 
@@ -99,7 +100,7 @@ export async function flashFirmware(firmwarePath: string | null = null, options:
       throw new Error(`Download tool does not exist: ${toolPath}`);
     }
     console.log(`Download tool: ${firmwareInfo.type}`);
-    
+
     console.log('Starting flash...');
     console.log('='.repeat(50));
     
@@ -259,7 +260,8 @@ async function executeFlash(toolPath: string, toolType: string, firmwareFile: st
       }
     }, 30000);
     
-    const logFile = path.join(process.cwd(), 'frimware-cli-tool.log');
+    const workspacePath = findWorkspacePath() || process.cwd();
+    const logFile = path.join(workspacePath, 'frimware-cli-tool.log');
     const logStream = fs.createWriteStream(logFile, { flags: 'w' });
     
     const hasStartedRef: RefObject = { value: false };
@@ -313,7 +315,7 @@ async function executeFlash(toolPath: string, toolType: string, firmwareFile: st
       ? config.platforms[platformKeyForDuration].downloadDuration 
       : undefined;
     const downloadDuration = platformDuration || 30000; // Default 30 seconds
-    
+    console.log(`Download expect duration: ${downloadDuration}`);
     // Stage configuration: each stage has a fixed progress range
     const stageConfig: Record<string, { min: number; max: number; duration: number }> = {
       'started': { min: 0, max: 5, duration: 5000 },        // 0-5% in 5 seconds

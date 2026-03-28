@@ -19,7 +19,8 @@
       "downloading": ["download", "burning"],
       "completed": ["complete", "success"],
       "error": ["error", "fail", "failed", "timeout"]
-    }
+    },
+    "downloadDuration": 55000
   },
   "tool": {
     "name": "FBFDownloader",

@@ -1,5 +1,5 @@
 {
-  "firmwarePath": "F:/vscode-extension/quick-firmware\\quectel_build\\release\\EG200NLMENR03A01M16",
+  "firmwarePath": "",
   "buildCommand": "",
   "buildGitBashPath": "",
   "defaultComPort": "COM107"
