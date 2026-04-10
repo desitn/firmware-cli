@@ -6,6 +6,5 @@ tools/*.log
 tools/detect_dl/*
 tools/ecflashtool/*
 tools/pacdownload/*
-skill/firmware-cli/scripts/tools/pacdownload/*
 quectel_build/
 node_modules

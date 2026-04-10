@@ -1,4 +1,4 @@
-# Firmware CLI 测试报告
+# Dove 测试报告
 
 ## 测试执行时间
 2026-03-18 10:52:21
@@ -59,12 +59,12 @@ powershell -ExecutionPolicy Bypass -File tests\test-all.ps1
 powershell -ExecutionPolicy Bypass -File tests\test-all.ps1 -Verbose
 
 # 测试特定版本的 exe
-powershell -ExecutionPolicy Bypass -File tests\test-all.ps1 -ExePath ".\firmware-cli-v2.exe"
+powershell -ExecutionPolicy Bypass -File tests\test-all.ps1 -ExePath ".\dove-v2.exe"
 ```
 
 ## 结论
 
-Firmware CLI 的核心功能测试基本通过：
+Dove 的核心功能测试基本通过：
 - ✅ 帮助系统正常工作
 - ✅ 固件列表功能正常
 - ✅ 配置显示正常

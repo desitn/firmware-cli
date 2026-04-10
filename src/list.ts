@@ -16,7 +16,7 @@ export async function listFirmware(options: ListOptions = {}): Promise<FirmwareI
       console.log(JSON.stringify({ firmwares: [], count: 0, recommended: null }));
     } else {
       console.log('No firmware files found');
-      console.log('Hint: Configure firmware-cli.json or use flash <path> command');
+      console.log('Hint: Configure dove.json or use flash <path> command');
     }
     return [];
   }
@@ -64,7 +64,7 @@ export async function listFirmware(options: ListOptions = {}): Promise<FirmwareI
     });
     
     console.log(`Recommended firmware: ${latest.name}`);
-    console.log(`Flash command: firmware-cli.exe flash "${latest.path}"`);
+    console.log(`Flash command: dove.exe flash "${latest.path}"`);
   }
   
   return firmwares;

@@ -57,7 +57,7 @@ export async function compileFirmware(commandIdentifier: string | null = null): 
       }
       
       if (!buildCmd) {
-        throw new Error('No build commands configured, please add commands to firmware-cli.json');
+        throw new Error('No build commands configured, please add commands to dove.json');
       }
     }
     
@@ -106,7 +106,7 @@ export async function listBuildCommands(): Promise<void> {
   
   if (!config.buildCommands || config.buildCommands.length === 0) {
     console.log('No build commands configured.');
-    console.log('\nAdd commands to firmware-cli.json:');
+    console.log('\nAdd commands to dove.json:');
     console.log('  "buildCommands": [');
     console.log('    { "name": "build", "command": "build.bat" },');
     console.log('    { "name": "clean", "command": "clean.bat" }');
@@ -120,9 +120,9 @@ export async function listBuildCommands(): Promise<void> {
   });
   
   console.log('\nUsage:');
-  console.log('  firmware-cli build              # Run default command');
-  console.log('  firmware-cli build -i  1        # Run by index');
-  console.log('  firmware-cli build -n  "clean"  # Run by name');
+  console.log('  dove build              # Run default command');
+  console.log('  dove build -i  1        # Run by index');
+  console.log('  dove build -n  "clean"  # Run by name');
 }
 
 /**
@@ -196,7 +196,7 @@ export async function addBuildCommand(name: string, command: string): Promise<vo
   }
   
   saveConfig(config);
-  console.log('Config saved to firmware-cli.json');
+  console.log('Config saved to dove.json');
 }
 
 /**
@@ -270,7 +270,7 @@ export async function setConfig(key: string, value: string): Promise<void> {
   }
   
   saveConfig(config);
-  console.log('Config saved to firmware-cli.json');
+  console.log('Config saved to dove.json');
 }
 
 /**

@@ -40,7 +40,7 @@ function showHelp(): void {
 Firmware Compilation and Flashing CLI Tool v1.0.0
 
 Usage:
-  firmware-cli.exe <command> [arguments]
+  dove.exe <command> [arguments]
 
 Commands:
   flash [path] [options]  Flash firmware (auto-find or specify path)
@@ -77,29 +77,29 @@ Commands:
   help                  Show help information
 
 Examples:
-  firmware-cli.exe flash
-  firmware-cli.exe build              # Run default build command
-  firmware-cli.exe build --list       # List all build commands
-  firmware-cli.exe build -i 1         # Run command by index
-  firmware-cli.exe build --index 1    # Run command by index
-  firmware-cli.exe build -n install   # Run command by name
-  firmware-cli.exe build --name install # Run command by name
-  firmware-cli.exe build-and-flash
-  firmware-cli.exe list
-  firmware-cli.exe serial
-  firmware-cli.exe monitor -p COM9
-  firmware-cli.exe monitor -p COM9 -b 9600 -t 5000
-  firmware-cli.exe monitor -p COM9 --include "ERROR,WARN" -o errors.log
-  firmware-cli.exe monitor -p COM9 --until "Done" -o boot.log
-  firmware-cli.exe monitor -p COM9 --lines 100 -o debug.log
-  firmware-cli.exe monitor -p COM9 --json --timeout 5000
-  firmware-cli.exe at -c "ATI"
-  firmware-cli.exe at -p COM107 -c "AT+CGMI"
-  firmware-cli.exe at -c "AT+CFUN=1,1" --timeout 10000
-  firmware-cli.exe at -c "ATI" --json
+  dove.exe flash
+  dove.exe build              # Run default build command
+  dove.exe build --list       # List all build commands
+  dove.exe build -i 1         # Run command by index
+  dove.exe build --index 1    # Run command by index
+  dove.exe build -n install   # Run command by name
+  dove.exe build --name install # Run command by name
+  dove.exe build-and-flash
+  dove.exe list
+  dove.exe serial
+  dove.exe monitor -p COM9
+  dove.exe monitor -p COM9 -b 9600 -t 5000
+  dove.exe monitor -p COM9 --include "ERROR,WARN" -o errors.log
+  dove.exe monitor -p COM9 --until "Done" -o boot.log
+  dove.exe monitor -p COM9 --lines 100 -o debug.log
+  dove.exe monitor -p COM9 --json --timeout 5000
+  dove.exe at -c "ATI"
+  dove.exe at -p COM107 -c "AT+CGMI"
+  dove.exe at -c "AT+CFUN=1,1" --timeout 10000
+  dove.exe at -c "ATI" --json
 
 Configuration file:
-  firmware-cli.json (in project root directory)
+  dove.json (in project root directory)
 
 Supported firmware types:
 ${supportedTypes}
@@ -131,7 +131,7 @@ function parseMonitorArgs(args: string[]): { portPath: string; options: Partial<
   }
   
   if (!portPath) {
-    throw new Error('Please specify serial port with -p (e.g., -p COM107), or configure defaultComPort in firmware-cli.json');
+    throw new Error('Please specify serial port with -p (e.g., -p COM107), or configure defaultComPort in dove.json');
   }
   
   const monitorOptions: Partial<MonitorOptions> = {

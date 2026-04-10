@@ -45,7 +45,7 @@ export async function flashFirmware(firmwarePath: string | null = null, options:
       console.log('Auto searching for firmware...');
       filePath = await findFirmwarePath();
       if (!filePath) {
-        throw new Error('Firmware file not found, please specify firmware path or configure firmware-cli.json');
+        throw new Error('Firmware file not found, please specify firmware path or configure dove.json');
       }
     }
     

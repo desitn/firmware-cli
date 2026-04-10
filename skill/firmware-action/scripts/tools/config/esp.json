@@ -1,0 +1,14 @@
+{
+  "platform": {
+    "type": "esp",
+    "extensions": [".bin"],
+    "description": "ESP S3/C6",
+    "progressPatterns": {
+      "started": ["init", "start", "begin"],
+      "downloading": ["download", "burning", "flashing"],
+      "completed": ["complete", "success", "finished"],
+      "error": ["error", "fail", "timeout"]
+    }
+  },
+  "tool": null
+}

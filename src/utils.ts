@@ -504,7 +504,7 @@ export function loadConfig(): CLIConfig {
   }
   
   // Second, try current working directory
-  const configPathWithDot = path.join(process.cwd(), 'firmware-cli.json');
+  const configPathWithDot = path.join(process.cwd(), 'dove.json');
   if (fs.existsSync(configPathWithDot)) {
     try {
       const configData = fs.readFileSync(configPathWithDot, 'utf8');
@@ -522,7 +522,7 @@ export function loadConfig(): CLIConfig {
  * Save configuration file
  */
 export function saveConfig(config: CLIConfig): void {
-  const configPath = path.join(process.cwd(), 'firmware-cli.json');
+  const configPath = path.join(process.cwd(), 'dove.json');
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 }
 

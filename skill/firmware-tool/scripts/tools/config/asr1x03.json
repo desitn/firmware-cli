@@ -1,0 +1,34 @@
+{
+  "platform": {
+    "type": "fbf",
+    "extensions": ["_fbf.bin"],
+    "description": "ASR 180X/190X Series",
+    "serial": {
+      "atPortPatterns": ["at port", "at usb"],
+      "atCommand": "AT+QDOWNLOAD=1",
+      "baudrate": 115200,
+      "autoEnterDlMode": true,
+      "downloadPortPatterns": ["download"],
+      "downloadPortVidPid": [
+        { "vid": "2ECC", "pid": "3001", "desc": "BOOT" },
+        { "vid": "2ECC", "pid": "3002", "desc": "BOOT" }
+      ]
+    },
+    "progressPatterns": {
+      "started": ["init", "initializing"],
+      "downloading": ["download", "burning"],
+      "completed": ["complete", "success"],
+      "error": ["error", "fail", "failed", "timeout"]
+    },
+    "downloadDuration": 55000
+  },
+  "tool": {
+    "name": "FBFDownloader",
+    "path": "FBFDownloader.exe",
+    "description": "ASR 1X03 Download Tool",
+    "args": {
+      "flash": ["-b", "{firmwarePath}"],
+      "default": []
+    }
+  }
+}

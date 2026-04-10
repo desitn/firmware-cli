@@ -1,4 +1,6 @@
-# Firmware CLI Tool
+# Dove - Firmware CLI Tool
+
+> Release a dove, deliver your firmware.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
@@ -6,7 +8,7 @@
 
 嵌入式固件编译和烧录 CLI 工具，支持多种芯片平台的固件开发流程。
 
-## Features
+## Features 
 
 - **Multi-Platform Support**: ASR 160X/180X/190X, UNISOC 8310/8910/8850, Eigen 618/718
 - **Auto Detection**: Automatic firmware type detection and port discovery
@@ -26,18 +28,18 @@ npm run build
 ```
 
 #### Method 2: Use Standalone Executable (No Node.js Required)
-Download `firmware-cli.exe` from the `dist/` directory.
+Download `dove.exe` from the `dist/` directory.
 
 ### First Flash
 
 1. **Initialize configuration** (optional):
 ```bash
-firmware-cli.exe config set firmwarePath "C:/path/to/firmware"
+dove.exe config set firmwarePath "C:/path/to/firmware"
 ```
 
 2. **Flash firmware** (auto-detect):
 ```bash
-firmware-cli.exe flash
+dove.exe flash
 ```
 
 ## Usage
@@ -49,7 +51,7 @@ firmware-cli.exe flash
 node dist/index.js <command> [arguments]
 
 # Using standalone executable
-firmware-cli.exe <command> [arguments]
+dove.exe <command> [arguments]
 ```
 
 ### Commands
@@ -57,18 +59,18 @@ firmware-cli.exe <command> [arguments]
 #### Flash Firmware
 ```bash
 # Auto-find and flash firmware
-firmware-cli.exe flash
+dove.exe flash
 
 # Specify firmware path
-firmware-cli.exe flash "C:/path/firmware.bin"
+dove.exe flash "C:/path/firmware.bin"
 
 # Skip auto entering download mode
-firmware-cli.exe flash --skip-dl-mode
+dove.exe flash --skip-dl-mode
 ```
 
 #### List Available Firmware
 ```bash
-firmware-cli.exe list
+dove.exe list
 ```
 
 **Example Output:**
@@ -92,53 +94,53 @@ Found 3 firmware(s):
 
 #### List USB Devices
 ```bash
-firmware-cli.exe devices
+dove.exe devices
 ```
 
 #### List Serial Ports
 ```bash
-firmware-cli.exe serial
+dove.exe serial
 ```
 
 #### Compile Firmware
 ```bash
 # Auto-find build command
-firmware-cli.exe build
+dove.exe build
 
 # Specify build command
-firmware-cli.exe build "build_OPTfile.bat"
+dove.exe build "build_OPTfile.bat"
 ```
 
 #### Build and Flash
 ```bash
-firmware-cli.exe build-and-flash
+dove.exe build-and-flash
 ```
 
 #### Serial Port Monitoring
 ```bash
 # Monitor with default settings
-firmware-cli.exe monitor -p COM107
+dove.exe monitor -p COM107
 
 # Monitor with timeout and output file
-firmware-cli.exe monitor -p COM107 --timeout 30000 -o log.txt
+dove.exe monitor -p COM107 --timeout 30000 -o log.txt
 
 # Filter output (include only ERROR lines)
-firmware-cli.exe monitor -p COM107 --include "ERROR" -o errors.log
+dove.exe monitor -p COM107 --include "ERROR" -o errors.log
 
 # JSON output for programmatic use
-firmware-cli.exe monitor -p COM107 --json --timeout 5000
+dove.exe monitor -p COM107 --json --timeout 5000
 ```
 
 #### Send AT Commands
 ```bash
 # Auto-detect AT port and send command
-firmware-cli.exe at -c "ATI"
+dove.exe at -c "ATI"
 
 # Specify port
-firmware-cli.exe at -p COM107 -c "AT+CGMI"
+dove.exe at -p COM107 -c "AT+CGMI"
 
 # JSON output
-firmware-cli.exe at -c "ATI" --json
+dove.exe at -c "ATI" --json
 ```
 
 **Example Output:**
@@ -160,25 +162,25 @@ Status: OK
 #### Configuration Management
 ```bash
 # Show current configuration
-firmware-cli.exe config
+dove.exe config
 
 # Set configuration values
-firmware-cli.exe config set firmwarePath "C:/path/to/firmware"
-firmware-cli.exe config set buildCommand "build_OPTfile.bat"
-firmware-cli.exe config set buildGitBashPath "C:/Program Files/Git/bin/bash.exe"
-firmware-cli.exe config set defaultComPort "COM107"
+dove.exe config set firmwarePath "C:/path/to/firmware"
+dove.exe config set buildCommand "build_OPTfile.bat"
+dove.exe config set buildGitBashPath "C:/Program Files/Git/bin/bash.exe"
+dove.exe config set defaultComPort "COM107"
 ```
 
 #### Help
 ```bash
-firmware-cli.exe help
+dove.exe help
 ```
 
 ## Configuration Files
 
 ### Project Configuration
 
-Create `firmware-cli.json` in your project root:
+Create `dove.json` in your project root:
 
 ```json
 {
@@ -307,10 +309,10 @@ Set progress mode in `tools/config/global.json`:
 
 ```bash
 # Single-line mode (default)
-firmware-cli.exe flash --progress single-line
+dove.exe flash --progress single-line
 
 # Multi-line mode
-firmware-cli.exe flash --progress multi-line
+dove.exe flash --progress multi-line
 ```
 
 ## Serial Monitoring Options
@@ -335,7 +337,7 @@ firmware-cli.exe flash --progress multi-line
 ### "Firmware file not found"
 - Check if `firmwarePath` in config is correct
 - Verify firmware files exist in the specified path
-- Try using absolute path: `firmware-cli.exe flash "C:/full/path/firmware.bin"`
+- Try using absolute path: `dove.exe flash "C:/full/path/firmware.bin"`
 
 ### "Workspace not found"
 - Ensure you're running from a project directory containing `quectel_build` folder
@@ -347,13 +349,13 @@ firmware-cli.exe flash --progress multi-line
 - Verify tool path in platform configuration (e.g., `tools/config/asr160x.json`)
 
 ### "Build command not found"
-- Configure build command: `firmware-cli.exe config set buildCommand "build_OPTfile.bat"`
+- Configure build command: `dove.exe config set buildCommand "build_OPTfile.bat"`
 - Ensure build script exists in your workspace
 
 ### "AT port not found"
 - Check USB connection and drivers
-- Try specifying port manually: `firmware-cli.exe at -p COM107 -c "ATI"`
-- List available ports: `firmware-cli.exe serial`
+- Try specifying port manually: `dove.exe at -p COM107 -c "ATI"`
+- List available ports: `dove.exe serial`
 
 ### "Serial port access denied"
 - Close other applications using the serial port
@@ -363,7 +365,7 @@ firmware-cli.exe flash --progress multi-line
 ## Project Structure
 
 ```
-firmware-cli/
+dove/
 ├── src/                    # TypeScript source code
 │   ├── index.ts           # Main entry point
 │   ├── flash.ts           # Firmware flashing logic
@@ -385,7 +387,7 @@ firmware-cli/
 │   └── pacdownload/       # UNISOC tools
 ├── dist/                  # Compiled JavaScript
 ├── skill/                 # AI skill integration
-│   └── firmware-cli/
+│   └── dove/
 │       ├── SKILL.md       # AI assistant documentation
 │       └── scripts/       # Distribution scripts
 ├── tests/                 # Test scripts
@@ -460,7 +462,7 @@ Example AI interactions:
 - "Send ATI command and show the response"
 - "Build and flash the project"
 
-See `skill/firmware-cli/SKILL.md` for detailed AI integration documentation.
+See `skill/dove/SKILL.md` for detailed AI integration documentation.
 
 ## Contributing
 

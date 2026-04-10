@@ -1,8 +1,8 @@
-# Firmware CLI Test Script
-# Run this script to verify all firmware-cli.exe commands
+# Dove Test Script
+# Run this script to verify all dove.exe commands
 
 param(
-    [string]$ExePath = ".\firmware-cli.exe",
+    [string]$ExePath = ".\dove.exe",
     [switch]$Verbose
 )
 
@@ -106,14 +106,14 @@ Write-Host ""
 
 # Check if exe exists
 if (!(Test-Path $ExePath)) {
-    Write-Failure "ERROR: firmware-cli.exe not found at $ExePath"
+    Write-Failure "ERROR: dove.exe not found at $ExePath"
     Write-Host ""
     Write-Host "Please build the exe first:" -ForegroundColor Yellow
     Write-Host "  npm run build:exe" -ForegroundColor Yellow
     exit 1
 }
 
-Write-Success "Found firmware-cli.exe"
+Write-Success "Found dove.exe"
 Write-Host ""
 
 # Test 1: Help command

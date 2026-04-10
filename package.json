@@ -1,5 +1,5 @@
 {
-  "name": "firmware-cli",
+  "name": "dove",
   "version": "1.0.0",
   "description": "CLI tool for firmware compilation and flashing, supports AI assistant integration",
   "main": "dist/index.js",
@@ -8,8 +8,7 @@
     "test": "ts-node src/index.ts help",
     "build": "tsc",
     "build:watch": "tsc --watch",
-    "build:exe": "npm run build && pkg . --targets node18-win-x64 --output ./firmware-cli.exe && npm run sync-dist",
-    "sync-dist": "xcopy /E /I /Y tools skill\\firmware-tool\\scripts\\tools & xcopy /E /I /Y tools skill\\firmware-action\\scripts\\tools & copy /Y firmware-cli.exe skill\\firmware-tool\\scripts\\ & copy /Y firmware-cli.exe skill\\firmware-action\\scripts\\ & copy /Y firmware-cli.json skill\\firmware-tool\\scripts\\ & copy /Y firmware-cli.json skill\\firmware-action\\scripts\\",
+    "build:exe": "npm run build && pkg . --targets node18-win-x64 --output ./dove.exe",
     "dev": "ts-node src/index.ts",
     "clean": "rimraf dist"
   },
@@ -32,7 +31,7 @@
     "serialport": "^12.0.0"
   },
   "bin": {
-    "firmware-cli": "./dist/index.js"
+    "dove": "./dist/index.js"
   },
   "pkg": {
     "scripts": [

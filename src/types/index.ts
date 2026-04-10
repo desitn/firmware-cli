@@ -139,7 +139,7 @@ export interface BuildCommandItem {
 }
 
 /**
- * CLI configuration file (firmware-cli.json)
+ * CLI configuration file (dove.json)
  */
 export interface CLIConfig {
   firmwarePath?: string;

@@ -1,6 +1,6 @@
-# Firmware CLI 测试
+# Dove 测试
 
-本目录包含 Firmware CLI 的所有测试脚本和测试结果。
+本目录包含 Dove 的所有测试脚本和测试结果。
 
 ## 文件说明
 
@@ -25,7 +25,7 @@ powershell -ExecutionPolicy Bypass -File .\tests\test-all.ps1 -Verbose
 ### 测试特定版本的 exe
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tests\test-all.ps1 -ExePath ".\firmware-cli-v2.exe"
+powershell -ExecutionPolicy Bypass -File .\tests\test-all.ps1 -ExePath ".\dove-v2.exe"
 ```
 
 ## 测试覆盖
@@ -71,7 +71,7 @@ powershell -ExecutionPolicy Bypass -File .\tests\test-all.ps1 -ExePath ".\firmwa
 
 - Windows 操作系统
 - PowerShell
-- 已构建的 `firmware-cli.exe`（运行 `npm run build:exe`）
+- 已构建的 `dove.exe`（运行 `npm run build:exe`）
 
 ## 持续集成
 
