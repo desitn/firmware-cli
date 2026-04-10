@@ -5,6 +5,9 @@ echo ========================================
 echo   Firmware CLI Tool - Environment Setup
 echo ========================================
 echo.
+echo [INFO] For VSCode terminals: dove is auto-configured by extension
+echo [INFO] This script installs dove for system-wide use
+echo.
 
 REM Get script directory (env/)
 set SCRIPT_DIR=%~dp0

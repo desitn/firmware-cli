@@ -1,5 +1,10 @@
 # Firmware CLI Tool - Environment Setup (PowerShell Version)
 # This script adds dove to PATH for PowerShell sessions
+#
+# NOTE: VSCode extension automatically sets up terminal environment via
+# environmentVariableCollection API - dove is immediately available in
+# all new VSCode terminals without running this script.
+# This script is for permanent system-wide installation.
 
 $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Definition
 # dove.exe is in the parent directory (dove/), not in env/
@@ -9,6 +14,9 @@ $FIRMWARE_CLI = Join-Path $FIRMWARE_CLI_DIR "dove.exe"
 Write-Host "========================================"
 Write-Host "   Firmware CLI Tool - Environment Setup"
 Write-Host "========================================"
+Write-Host ""
+Write-Host "[INFO] For VSCode terminals: dove is auto-configured by extension"
+Write-Host "[INFO] This script installs dove for system-wide use"
 Write-Host ""
 
 # Check if dove.exe exists
