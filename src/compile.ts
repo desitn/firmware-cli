@@ -1,5 +1,6 @@
 import fs from 'fs';
-import { findWorkspacePath, loadConfig, saveConfig, isWindows, executeCommand } from './utils';
+import path from 'path';
+import { findWorkspacePath, loadConfig, saveConfig, isWindows, executeCommand, getGlobalPaths } from './utils';
 
 /**
  * Build command interface
@@ -7,6 +8,8 @@ import { findWorkspacePath, loadConfig, saveConfig, isWindows, executeCommand } 
 interface BuildCommand {
   name: string;
   command: string;
+  description?: string;
+  isActive?: boolean;
 }
 
 /**
@@ -29,11 +32,11 @@ export async function compileFirmware(commandIdentifier: string | null = null): 
     
     // Get build command to execute
     let buildCmd: BuildCommand | null = null;
-    
+
     if (commandIdentifier) {
       // Try to find by name first
       buildCmd = findCommandByName(config.buildCommands, commandIdentifier);
-      
+
         // If not found by name, try to parse as index
         if (!buildCmd) {
           const index = parseInt(commandIdentifier, 10);
@@ -41,32 +44,40 @@ export async function compileFirmware(commandIdentifier: string | null = null): 
             buildCmd = config.buildCommands[index - 1];
           }
         }
-      
+
       if (!buildCmd) {
         throw new Error(`Build command "${commandIdentifier}" not found`);
       }
     } else {
-      // No identifier provided, use lastBuildCommand
-      if (config.lastBuildCommand && config.buildCommands) {
-        buildCmd = findCommandByName(config.buildCommands, config.lastBuildCommand);
+      // No identifier provided, use active command
+      if (config.buildCommands) {
+        // Find the active command
+        buildCmd = config.buildCommands.find(cmd => cmd.isActive) || null;
+
+        // If no active command found, use first command
+        if (!buildCmd && config.buildCommands.length > 0) {
+          buildCmd = config.buildCommands[0];
+        }
       }
-      
-      // If lastBuildCommand not found, use first command
-      if (!buildCmd && config.buildCommands && config.buildCommands.length > 0) {
-        buildCmd = config.buildCommands[0];
-      }
-      
+
       if (!buildCmd) {
         throw new Error('No build commands configured, please add commands to dove.json');
       }
     }
-    
+
     console.log(`Build command: [${buildCmd.name}] ${buildCmd.command}`);
+    if (buildCmd.description) {
+      console.log(`Description: ${buildCmd.description}`);
+    }
     console.log('='.repeat(50));
-    
-    // Update lastBuildCommand
-    config.lastBuildCommand = buildCmd.name;
-    saveConfig(config);
+
+    // Update active command
+    if (!buildCmd.isActive && config.buildCommands) {
+      config.buildCommands.forEach(cmd => {
+        cmd.isActive = cmd.name === buildCmd!.name;
+      });
+      saveConfig(config);
+    }
     
     await executeBuild(workspacePath, buildCmd.command, config.buildGitBashPath);
     
@@ -100,50 +111,67 @@ function findCommandByName(commands: BuildCommand[] | undefined, name: string): 
  */
 export async function listBuildCommands(): Promise<void> {
   const config = loadConfig();
-  
+
   console.log('Available Build Commands');
   console.log('='.repeat(50));
-  
+
   if (!config.buildCommands || config.buildCommands.length === 0) {
     console.log('No build commands configured.');
     console.log('\nAdd commands to dove.json:');
     console.log('  "buildCommands": [');
-    console.log('    { "name": "build", "command": "build.bat" },');
-    console.log('    { "name": "clean", "command": "clean.bat" }');
+    console.log('    { "name": "build", "command": "build.bat", "description": "Production build", "isActive": true },');
+    console.log('    { "name": "clean", "command": "clean.bat", "description": "Clean build artifacts" }');
     console.log('  ]');
     return;
   }
-  
+
   config.buildCommands.forEach((cmd, index) => {
-    const marker = cmd.name === config.lastBuildCommand ? ' (default)' : '';
-    console.log(`  ${index + 1}. [${cmd.name}] ${cmd.command}${marker}`);
+    const marker = cmd.isActive ? ' (active)' : '';
+    const desc = cmd.description ? ` - ${cmd.description}` : '';
+    console.log(`  ${index + 1}. [${cmd.name}] ${cmd.command}${desc}${marker}`);
   });
-  
+
   console.log('\nUsage:');
-  console.log('  dove build              # Run default command');
+  console.log('  dove build              # Run active command');
   console.log('  dove build -i  1        # Run by index');
   console.log('  dove build -n  "clean"  # Run by name');
 }
 
 /**
- * Execute build
+ * Execute build with PATH injection
  */
 async function executeBuild(workspacePath: string, buildCommand: string, bashPath: string | undefined): Promise<void> {
+  // Load global config for Git Bash path
+  const globalPaths = getGlobalPaths();
+  const gitBashPath = globalPaths?.gitBash || bashPath;
+
+  // Get bin directory for PATH injection
+  const gitBashBinDir = gitBashPath ? path.dirname(gitBashPath) : null;
+
+  // Build environment with PATH injection
+  const env = gitBashBinDir ? {
+    ...process.env,
+    PATH: isWindows()
+      ? `${gitBashBinDir};${process.env.PATH}`
+      : `${gitBashBinDir}:${process.env.PATH}`
+  } : process.env;
+
   let taskCmd: string;
   let args: string[];
-  
+
   // Check if the command is a bash script (.sh file)
   // Match .sh followed by space or end of string to handle cases like "build.sh -app"
   const isBash = /\.sh(\s|$)/i.test(buildCommand);
-  
+
   if (isWindows()) {
     if (isBash) {
-      if (!bashPath || !fs.existsSync(bashPath)) {
-        throw new Error('Shell script requires Git Bash, please set buildGitBashPath in config file');
+      if (!gitBashPath || !fs.existsSync(gitBashPath)) {
+        throw new Error('Shell script requires Git Bash, please set paths.gitBash in global.json or buildGitBashPath in dove.json');
       }
-      taskCmd = bashPath;
+      taskCmd = gitBashPath;
       args = ['-c', `./${buildCommand}`];
-      console.log(`Using Git Bash: ${bashPath}`);
+      console.log(`Using Git Bash: ${gitBashPath}`);
+      console.log(`PATH injected: ${gitBashBinDir}`);
     } else {
       taskCmd = 'cmd';
       args = ['/c', `${buildCommand}`];
@@ -152,14 +180,15 @@ async function executeBuild(workspacePath: string, buildCommand: string, bashPat
     taskCmd = '/bin/bash';
     args = ['-c', `${buildCommand}`];
   }
-  
+
   console.log(`\nExecuting command: ${taskCmd} ${args.join(' ')}`);
   console.log('='.repeat(50));
-  
+
   try {
     await executeCommand(taskCmd, args, {
       cwd: workspacePath,
-      shell: true
+      shell: true,
+      env: env
     });
   } catch (error) {
     const err = error as Error;
@@ -170,31 +199,38 @@ async function executeBuild(workspacePath: string, buildCommand: string, bashPat
 /**
  * Add build command
  */
-export async function addBuildCommand(name: string, command: string): Promise<void> {
+export async function addBuildCommand(name: string, command: string, description: string = ''): Promise<void> {
   const config = loadConfig();
-  
+
   if (!config.buildCommands) {
     config.buildCommands = [];
   }
-  
+
   // Check if name already exists
   const existingIndex = config.buildCommands.findIndex(cmd => cmd.name === name);
   if (existingIndex >= 0) {
     // Update existing command
     config.buildCommands[existingIndex].command = command;
+    config.buildCommands[existingIndex].description = description;
     console.log(`Updated build command: [${name}] ${command}`);
+    if (description) {
+      console.log(`Description: ${description}`);
+    }
   } else {
     // Add new command
-    config.buildCommands.push({ name, command });
+    const isActive = config.buildCommands.length === 0; // First command is active by default
+    config.buildCommands.push({ name, command, description, isActive });
     console.log(`Added build command: [${name}] ${command}`);
+    if (description) {
+      console.log(`Description: ${description}`);
+    }
   }
-  
-  // If this is the first command, set it as default
+
+  // If this is the first command, set it as active
   if (config.buildCommands.length === 1) {
-    config.lastBuildCommand = name;
-    console.log(`Set "${name}" as default command`);
+    console.log(`Set "${name}" as active command`);
   }
-  
+
   saveConfig(config);
   console.log('Config saved to dove.json');
 }
@@ -204,50 +240,53 @@ export async function addBuildCommand(name: string, command: string): Promise<vo
  */
 export async function removeBuildCommand(name: string): Promise<void> {
   const config = loadConfig();
-  
+
   if (!config.buildCommands || config.buildCommands.length === 0) {
     console.log('No build commands to remove');
     return;
   }
-  
+
   const index = config.buildCommands.findIndex(cmd => cmd.name === name);
   if (index < 0) {
     console.log(`Build command "${name}" not found`);
     return;
   }
-  
+
+  const wasActive = config.buildCommands[index].isActive;
   config.buildCommands.splice(index, 1);
-  
-  // If removed command was the default, clear lastBuildCommand
-  if (config.lastBuildCommand === name) {
-    config.lastBuildCommand = config.buildCommands.length > 0 ? config.buildCommands[0].name : undefined;
-    if (config.lastBuildCommand) {
-      console.log(`Default command changed to: ${config.lastBuildCommand}`);
-    }
+
+  // If removed command was active, set first command as active
+  if (wasActive && config.buildCommands.length > 0) {
+    config.buildCommands[0].isActive = true;
+    console.log(`Active command changed to: ${config.buildCommands[0].name}`);
   }
-  
+
   saveConfig(config);
   console.log(`Removed build command: ${name}`);
 }
 
 /**
- * Set default build command
+ * Set active build command
  */
-export async function setDefaultCommand(name: string): Promise<void> {
+export async function setActiveCommand(name: string): Promise<void> {
   const config = loadConfig();
-  
+
   if (!config.buildCommands || config.buildCommands.length === 0) {
     throw new Error('No build commands configured');
   }
-  
+
   const found = config.buildCommands.find(cmd => cmd.name === name);
   if (!found) {
     throw new Error(`Build command "${name}" not found`);
   }
-  
-  config.lastBuildCommand = name;
+
+  // Set all commands inactive, then set the specified one active
+  config.buildCommands.forEach(cmd => {
+    cmd.isActive = cmd.name === name;
+  });
+
   saveConfig(config);
-  console.log(`Set "${name}" as default build command`);
+  console.log(`Set "${name}" as active build command`);
 }
 
 /**
@@ -278,21 +317,24 @@ export async function setConfig(key: string, value: string): Promise<void> {
  */
 export async function showConfig(): Promise<void> {
   const config = loadConfig();
-  
+
   console.log('Current Config');
   console.log('='.repeat(50));
   console.log(`Firmware path: ${config.firmwarePath || 'Not set'}`);
   console.log(`Git Bash: ${config.buildGitBashPath || 'Not set'}`);
   console.log(`Default COM port: ${config.defaultComPort || 'Not set'}`);
-  console.log(`Last build command: ${config.lastBuildCommand || 'Not set'}`);
-  
+
   if (config.buildCommands && config.buildCommands.length > 0) {
+    const activeCmd = config.buildCommands.find(cmd => cmd.isActive);
+    console.log(`\nActive command: ${activeCmd?.name || 'None'}`);
+
     console.log('\nBuild commands:');
     config.buildCommands.forEach((cmd, index) => {
-      const marker = cmd.name === config.lastBuildCommand ? ' *' : '';
-      console.log(`  ${index + 1}. [${cmd.name}] ${cmd.command}${marker}`);
+      const marker = cmd.isActive ? ' *' : '';
+      const desc = cmd.description ? ` (${cmd.description})` : '';
+      console.log(`  ${index + 1}. [${cmd.name}] ${cmd.command}${desc}${marker}`);
     });
   }
-  
+
   console.log('='.repeat(50));
 }

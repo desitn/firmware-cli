@@ -65,6 +65,14 @@ export interface GlobalSettings {
 }
 
 /**
+ * Global paths configuration
+ */
+export interface GlobalPaths {
+  gitBash?: string;
+  [key: string]: string | undefined;
+}
+
+/**
  * Output configuration
  */
 export interface OutputConfig {
@@ -136,6 +144,8 @@ export interface FirmwareInfo {
 export interface BuildCommandItem {
   name: string;
   command: string;
+  description?: string;
+  isActive?: boolean;
 }
 
 /**
@@ -143,9 +153,7 @@ export interface BuildCommandItem {
  */
 export interface CLIConfig {
   firmwarePath?: string;
-  buildCommand?: string;
   buildCommands?: BuildCommandItem[];
-  lastBuildCommand?: string;
   buildGitBashPath?: string;
   defaultComPort?: string;
   workspacePath?: string;
@@ -233,6 +241,7 @@ export interface ExecuteCommandOptions {
   shell?: boolean;
   silent?: boolean;
   autoPressKey?: boolean;
+  env?: NodeJS.ProcessEnv;
 }
 
 /**

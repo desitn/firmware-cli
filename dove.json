@@ -1,0 +1,16 @@
+{
+  "firmwarePath": "",
+  "buildCommands": [],
+  "buildGitBashPath": "",
+  "defaultComPort": "",
+  "language": "auto",
+  "theme": {
+    "mode": "auto",
+    "accent": "blue"
+  },
+  "search": {
+    "port": 8080,
+    "scope": "global",
+    "maxResults": 500
+  }
+}

@@ -1,6 +1,9 @@
 {
   "version": "1.0.0",
   "description": "Firmware Download Tool Configuration",
+  "paths": {
+    "gitBash": "C:/Program Files/Git/bin/bash.exe"
+  },
   "settings": {
     "defaultPort": "auto",
     "timeout": 300,

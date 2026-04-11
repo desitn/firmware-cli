@@ -12,7 +12,8 @@ import type {
   CLIConfig,
   FirmwareTypeResult,
   ExecuteCommandOptions,
-  ExecuteCommandResult
+  ExecuteCommandResult,
+  GlobalPaths
 } from './types';
 
 /** Tool configuration cache */
@@ -68,6 +69,7 @@ export function loadToolsConfig(forceReload: boolean = false): ToolsConfig {
     description: string;
     settings: GlobalSettings;
     serial?: any;
+    paths?: GlobalPaths;
   }>(globalConfigPath);
   
   if (!globalConfig) {
@@ -561,6 +563,23 @@ export function killProcessTree(
 }
 
 /**
+ * Get global paths configuration
+ */
+export function getGlobalPaths(): GlobalPaths | null {
+  const configDir = getConfigPath();
+  const globalConfigPath = path.join(configDir, 'global.json');
+  const globalConfig = loadJsonFile<{
+    version: string;
+    description: string;
+    settings: GlobalSettings;
+    serial?: any;
+    paths?: GlobalPaths;
+  }>(globalConfigPath);
+
+  return globalConfig?.paths || null;
+}
+
+/**
  * Execute command
  */
 export function executeCommand(
@@ -569,8 +588,9 @@ export function executeCommand(
   options: ExecuteCommandOptions = {}
 ): Promise<ExecuteCommandResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { 
+    const child = spawn(command, args, {
       shell: true,
+      env: options.env || process.env,
       ...options
     });
     
