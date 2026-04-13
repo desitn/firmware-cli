@@ -19,7 +19,7 @@
 | help | `help` | 帮助命令正常显示 |
 | help-long | `--help` | 长格式帮助参数正常 |
 | help-short | `-h` | 短格式帮助参数正常 |
-| list | `list` | 固件列表命令正常（未找到固件是正常的） |
+| list | `flash --list` | 固件列表命令正常（未找到固件是正常的） |
 | config-show | `config` | 配置显示正常 |
 | devices | `devices` | USB设备枚举正常 |
 | serial | `serial` | 串口列表正常 |

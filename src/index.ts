@@ -37,19 +37,21 @@ function showHelp(): void {
   const supportedTypes = generateSupportedTypes();
   
   console.log(`
-Firmware Compilation and Flashing CLI Tool v1.0.0
+Dove Firmware Compilation and Flashing CLI Tool v1.0.0
 
 Usage:
   dove.exe <command> [arguments]
 
 Commands:
   flash [path] [options]  Flash firmware (auto-find or specify path)
+    --list, -l          List available firmware files
     --skip-dl-mode, -s  Skip auto entering download mode
-  list                 List available firmware
+    --progress <mode>   Progress display mode (simple/detailed)
   devices              List USB devices
   serial               List serial port devices
   monitor [options]    Open serial port and monitor data
-    -p, --port <port>   Serial port (e.g., COM107, use config default if not specified)
+    -p, --port <port>   Serial port (e.g., COM107)
+    --tag <tag>         Select port by tag (e.g., --tag Log, uses comPorts config)
     --baud, -b <rate>   Set baud rate (default 115200)
     --timeout, -t <ms>  Set timeout in milliseconds (default 0 means no timeout)
     --output, -o <file> Output to file
@@ -64,30 +66,30 @@ Commands:
   at [options]          Send AT command and get response
     -c, --command <cmd> AT command to send (required)
     -p, --port <port>   Serial port (auto-detect if not specified)
+    --tag <tag>         Select port by tag (e.g., --tag AT, uses comPorts config)
     -t, --timeout <ms>  Set timeout in milliseconds (default 5000)
     --platform <type>   Platform for auto-detect (default asr160x)
     --json              Output results in JSON format
   build [options]       Compile firmware
-    --list, -l          List all available commands
-    -i, --index <n>     Run command by index (1-based)
-    -n, --name <name>   Run command by name
+    --list              List all available commands
+    --index <n>         Run command by index (1-based)
+    --name <name>       Run command by name
   build-and-flash       Compile and flash latest firmware
   config                Show current configuration
   config set <key> <value>  Set configuration item
   help                  Show help information
 
 Examples:
-  dove.exe flash
   dove.exe build              # Run default build command
   dove.exe build --list       # List all build commands
-  dove.exe build -i 1         # Run command by index
   dove.exe build --index 1    # Run command by index
-  dove.exe build -n install   # Run command by name
   dove.exe build --name install # Run command by name
   dove.exe build-and-flash
-  dove.exe list
+  dove.exe flash              # Flash firmware (auto-find)
+  dove.exe flash --list       # List available firmware
   dove.exe serial
   dove.exe monitor -p COM9
+  dove.exe monitor --tag Log --timeout 30000  # Use port with Log tag
   dove.exe monitor -p COM9 -b 9600 -t 5000
   dove.exe monitor -p COM9 --include "ERROR,WARN" -o errors.log
   dove.exe monitor -p COM9 --until "Done" -o boot.log
@@ -114,26 +116,60 @@ function parseMonitorArgs(args: string[]): { portPath: string; options: Partial<
     const index = args.findIndex(arg => arg === short || arg === long);
     return index !== -1 ? args[index + 1] : null;
   };
-  
+
   const hasFlag = (short: string | null, long: string): boolean => {
     return args.includes(short || '') || args.includes(long);
   };
-  
+
+  // Helper function to get available tags from config
+  const getAvailableTags = (config: CLIConfig): string => {
+    if (!config.comPorts || config.comPorts.length === 0) return 'none';
+    const allTags = config.comPorts.flatMap(p => p.tags);
+    return [...new Set(allTags)].join(', ');
+  };
+
   let portPath = getArgValue('-p', '--port');
   let portSource = 'user_input';
-  
+  let tag = getArgValue(null, '--tag');
+
   if (!portPath) {
     const config = loadConfig() as CLIConfig;
-    if (config.defaultComPort) {
+
+    // Check if --tag is specified, find port by tag
+    if (tag) {
+      if (config.comPorts && config.comPorts.length > 0) {
+        const portConfig = config.comPorts.find(p => p.tags.includes(tag));
+        if (portConfig) {
+          portPath = portConfig.port;
+          portSource = 'config_tag';
+        } else {
+          throw new Error(`No port found with tag '${tag}'. Available tags: ${getAvailableTags(config)}`);
+        }
+      } else {
+        throw new Error(`No comPorts configured in dove.json. Please configure ports with tags first.`);
+      }
+    }
+
+    // Fall back to defaultComPort for backward compatibility
+    if (!portPath && config.defaultComPort) {
       portPath = config.defaultComPort;
       portSource = 'config_default';
     }
+
+    // Try active port from comPorts if no defaultComPort
+    if (!portPath && config.comPorts && config.comPorts.length > 0) {
+      const activePort = config.comPorts.find(p => p.isActive);
+      if (activePort) {
+        portPath = activePort.port;
+        portSource = 'config_active';
+      }
+    }
   }
-  
+
   if (!portPath) {
-    throw new Error('Please specify serial port with -p (e.g., -p COM107), or configure defaultComPort in dove.json');
+    throw new Error('Please specify serial port with -p (e.g., -p COM107), or use --tag to select by tag, or configure defaultComPort in dove.json');
   }
-  
+
   const monitorOptions: Partial<MonitorOptions> = {
     baudRate: parseInt(getArgValue('-b', '--baud') || '') || 115200,
     timeout: parseInt(getArgValue('-t', '--timeout') || '') || 0,
@@ -147,44 +183,54 @@ function parseMonitorArgs(args: string[]): { portPath: string; options: Partial<
     json: hasFlag(null, '--json'),
     timestamp: hasFlag(null, '--timestamp')
   };
-  
-  if (portSource === 'config_default' && !monitorOptions.json) {
-    console.log(`\nUsing configured default serial port: ${portPath}\n`);
+
+  if (portSource !== 'user_input' && !monitorOptions.json) {
+    if (portSource === 'config_tag') {
+      console.log(`\nUsing port with tag '${tag}': ${portPath}\n`);
+    } else if (portSource === 'config_active') {
+      console.log(`\nUsing active port: ${portPath}\n`);
+    } else {
+      console.log(`\nUsing configured default serial port: ${portPath}\n`);
+    }
   }
-  
+
   return { portPath, options: monitorOptions };
 }
 
 /**
  * Parse command line arguments for AT command
  */
-function parseATArgs(args: string[]): { 
-  portPath: string | null; 
-  command: string; 
-  timeout: number; 
-  platform: string; 
+function parseATArgs(args: string[]): {
+  portPath: string | null;
+  command: string;
+  timeout: number;
+  platform: string;
   json: boolean;
+  tag?: string;
 } {
   const getArgValue = (short: string | null, long: string): string | null => {
     const index = args.findIndex(arg => arg === short || arg === long);
     return index !== -1 ? args[index + 1] : null;
   };
-  
+
   const hasFlag = (short: string | null, long: string): boolean => {
     return args.includes(short || '') || args.includes(long);
   };
-  
+
   const command = getArgValue('-c', '--command');
   if (!command) {
     throw new Error('AT command is required. Use -c or --command to specify (e.g., -c "ATI")');
   }
-  
+
+  const tag = getArgValue(null, '--tag');
+
   return {
     portPath: getArgValue('-p', '--port'),
     command,
     timeout: parseInt(getArgValue('-t', '--timeout') || '') || 5000,
     platform: getArgValue(null, '--platform') || 'asr160x',
-    json: hasFlag(null, '--json')
+    json: hasFlag(null, '--json'),
+    tag: tag || undefined
   };
 }
 
@@ -198,6 +244,15 @@ async function main(): Promise<number> {
   try {
     switch (command) {
       case 'flash': {
+        const hasFlag = (flag: string): boolean => args.includes(flag);
+
+        // Check for --list or -l flag to list firmware
+        if (hasFlag('--list') || hasFlag('-l')) {
+          const jsonMode = hasFlag('--json');
+          await listFirmware({ json: jsonMode });
+          return 0;
+        }
+
         const skipDlMode = args.includes('--skip-dl-mode') || args.includes('-s');
         const progressIndex = args.findIndex(arg => arg === '--progress');
         const progressMode = progressIndex !== -1 ? args[progressIndex + 1] : null;
@@ -206,6 +261,7 @@ async function main(): Promise<number> {
         return 0;
       }
       case 'list': {
+        // Keep as alias for flash --list
         const jsonMode = args.includes('--json');
         await listFirmware({ json: jsonMode });
         return 0;
@@ -224,27 +280,72 @@ async function main(): Promise<number> {
         return 0;
       }
       case 'at': {
-        const { portPath, command, timeout, platform, json } = parseATArgs(args);
-        
+        const { portPath, command, timeout, platform, json, tag } = parseATArgs(args);
+
         let actualPortPath = portPath;
         let portSource = 'user_input';
-        
+
         if (!actualPortPath) {
-          const atPort = await findATPort(platform);
-          if (atPort) {
-            actualPortPath = atPort.path;
-            portSource = 'auto_detect';
+          const config = loadConfig() as CLIConfig;
+
+          // Check if --tag is specified, find port by tag
+          if (tag) {
+            if (config.comPorts && config.comPorts.length > 0) {
+              const portConfig = config.comPorts.find(p => p.tags.includes(tag));
+              if (portConfig) {
+                actualPortPath = portConfig.port;
+                portSource = 'config_tag';
+              } else {
+                const allTags = config.comPorts.flatMap(p => p.tags);
+                const uniqueTags = [...new Set(allTags)];
+                throw new Error(`No port found with tag '${tag}'. Available tags: ${uniqueTags.join(', ')}`);
+              }
+            } else {
+              throw new Error('No comPorts configured in dove.json. Please configure ports with tags first.');
+            }
+          }
+
+          // Fall back to auto-detect
+          if (!actualPortPath) {
+            const atPort = await findATPort(platform);
+            if (atPort) {
+              actualPortPath = atPort.path;
+              portSource = 'auto_detect';
+            }
+          }
+
+          // Fall back to defaultComPort for backward compatibility
+          if (!actualPortPath && config.defaultComPort) {
+            actualPortPath = config.defaultComPort;
+            portSource = 'config_default';
+          }
+
+          // Try active port from comPorts if no defaultComPort
+          if (!actualPortPath && config.comPorts && config.comPorts.length > 0) {
+            const activePort = config.comPorts.find(p => p.isActive);
+            if (activePort) {
+              actualPortPath = activePort.port;
+              portSource = 'config_active';
+            }
           }
         }
-        
+
         if (!actualPortPath) {
-          throw new Error('Please specify serial port with -p (e.g., -p COM107), or use --platform to auto-detect AT port');
+          throw new Error('Please specify serial port with -p (e.g., -p COM107), or use --tag to select by tag, or use --platform to auto-detect AT port');
         }
-        
-        if (portSource === 'auto_detect' && !json) {
-          console.log(`\nAuto-detected AT port: ${actualPortPath}\n`);
+
+        if (portSource !== 'user_input' && !json) {
+          if (portSource === 'config_tag') {
+            console.log(`\nUsing port with tag '${tag}': ${actualPortPath}\n`);
+          } else if (portSource === 'config_active') {
+            console.log(`\nUsing active port: ${actualPortPath}\n`);
+          } else if (portSource === 'auto_detect') {
+            console.log(`\nAuto-detected AT port: ${actualPortPath}\n`);
+          } else {
+            console.log(`\nUsing configured default serial port: ${actualPortPath}\n`);
+          }
         }
-        
+
         const result = await sendATCommandCLI(actualPortPath, command, timeout);
         
         if (json) {
@@ -269,36 +370,36 @@ async function main(): Promise<number> {
         return 0;
       }
       case 'build': {
-        // Parse build command arguments
-        const getArgValue = (short: string | null, long: string): string | null => {
-          const index = args.findIndex(arg => arg === short || arg === long);
+        // Parse build command arguments (only full parameter names)
+        const getArgValue = (long: string): string | null => {
+          const index = args.findIndex(arg => arg === long);
           return index !== -1 ? args[index + 1] : null;
         };
-        
-        const hasFlag = (short: string | null, long: string): boolean => {
-          return args.includes(short || '') || args.includes(long);
+
+        const hasFlag = (long: string): boolean => {
+          return args.includes(long);
         };
-        
-        // Check for --list or -l flag
-        if (hasFlag('-l', '--list')) {
+
+        // Check for --list flag
+        if (hasFlag('--list')) {
           await listBuildCommands();
           return 0;
         }
-        
-        // Check for -i or --index
-        const indexValue = getArgValue('-i', '--index');
+
+        // Check for --index
+        const indexValue = getArgValue('--index');
         if (indexValue) {
           await compileFirmware(indexValue);
           return 0;
         }
-        
-        // Check for -n or --name
-        const nameValue = getArgValue('-n', '--name');
+
+        // Check for --name
+        const nameValue = getArgValue('--name');
         if (nameValue) {
           await compileFirmware(nameValue);
           return 0;
         }
-        
+
         // No options provided, run default command
         await compileFirmware(null);
         return 0;
@@ -315,8 +416,6 @@ async function main(): Promise<number> {
         }
         return 0;
       case 'help':
-      case '--help':
-      case '-h':
         showHelp();
         return 0;
       default:

@@ -70,7 +70,7 @@ dove.exe flash --skip-dl-mode
 
 #### List Available Firmware
 ```bash
-dove.exe list
+dove.exe flash --list
 ```
 
 **Example Output:**
@@ -90,6 +90,18 @@ Found 3 firmware(s):
    Size: 15.4 MB
    Time: 2024/01/14 09:15:10
    Path: C:/workspace/release/v1.2.2/firmware_v1.2.2.zip
+```
+
+#### Flash Firmware
+```bash
+# Auto-find and flash latest firmware
+dove.exe flash
+
+# Flash specific firmware path
+dove.exe flash C:/path/to/firmware.zip
+
+# Skip download mode (for manual mode entry)
+dove.exe flash --skip-dl-mode
 ```
 
 #### List USB Devices

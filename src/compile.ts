@@ -18,7 +18,7 @@ interface BuildCommand {
  */
 export async function compileFirmware(commandIdentifier: string | null = null): Promise<void> {
   try {
-    console.log('Firmware Compilation Tool');
+    console.log('Dove Firmware Compilation Tool');
     console.log('='.repeat(50));
     
     const workspacePath = findWorkspacePath();
@@ -133,8 +133,8 @@ export async function listBuildCommands(): Promise<void> {
 
   console.log('\nUsage:');
   console.log('  dove build              # Run active command');
-  console.log('  dove build -i  1        # Run by index');
-  console.log('  dove build -n  "clean"  # Run by name');
+  console.log('  dove build --index 1    # Run by index');
+  console.log('  dove build --name "clean" # Run by name');
 }
 
 /**
@@ -143,7 +143,16 @@ export async function listBuildCommands(): Promise<void> {
 async function executeBuild(workspacePath: string, buildCommand: string, bashPath: string | undefined): Promise<void> {
   // Load global config for Git Bash path
   const globalPaths = getGlobalPaths();
-  const gitBashPath = globalPaths?.gitBash || bashPath;
+  let gitBashPath = globalPaths?.gitBash || bashPath;
+
+  // Normalize: if path ends with git-bash.exe, use bin/bash.exe instead (CLI version)
+  if (gitBashPath && gitBashPath.toLowerCase().endsWith('git-bash.exe')) {
+    const bashExe = path.join(path.dirname(gitBashPath), 'bin', 'bash.exe');
+    if (fs.existsSync(bashExe)) {
+      gitBashPath = bashExe;
+      console.log(`Using CLI bash: ${gitBashPath} (instead of git-bash.exe)`);
+    }
+  }
 
   // Get bin directory for PATH injection
   const gitBashBinDir = gitBashPath ? path.dirname(gitBashPath) : null;
@@ -168,7 +177,8 @@ async function executeBuild(workspacePath: string, buildCommand: string, bashPat
       if (!gitBashPath || !fs.existsSync(gitBashPath)) {
         throw new Error('Shell script requires Git Bash, please set paths.gitBash in global.json or buildGitBashPath in dove.json');
       }
-      taskCmd = gitBashPath;
+      // Quote path if it contains spaces
+      taskCmd = gitBashPath.includes(' ') ? `"${gitBashPath}"` : gitBashPath;
       args = ['-c', `./${buildCommand}`];
       console.log(`Using Git Bash: ${gitBashPath}`);
       console.log(`PATH injected: ${gitBashBinDir}`);
@@ -185,7 +195,9 @@ async function executeBuild(workspacePath: string, buildCommand: string, bashPat
   console.log('='.repeat(50));
 
   try {
-    await executeCommand(taskCmd, args, {
+    // When shell:true, pass quoted command as single string
+    const fullCmd = args.length > 0 ? `${taskCmd} ${args.join(' ')}` : taskCmd;
+    await executeCommand(fullCmd, [], {
       cwd: workspacePath,
       shell: true,
       env: env

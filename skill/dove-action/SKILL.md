@@ -101,7 +101,7 @@ dove.exe build
 dove.exe build --list
 
 # 按索引执行命令 - 需确认
-dove.exe build -i 1
+dove.exe build --index 1
 ```
 
 ### 编译并烧录
@@ -161,5 +161,5 @@ dove.exe at -c "AT+CFUN=1,1" --timeout 10000
 
 ## 注意事项
 
-- **低风险操作在其他 skill**：list、devices、serial、config、monitor、查询类 AT 命令在 `dove-query` skill 中，可直接执行
+- **低风险操作在其他 skill**：`flash --list`、devices、serial、config、monitor、查询类 AT 命令在 `dove-query` skill 中，可直接执行
 - 如果用户仅请求查询信息，不要在此 skill 执行，应使用 `dove-query`

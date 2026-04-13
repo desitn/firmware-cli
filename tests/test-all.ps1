@@ -122,9 +122,9 @@ Invoke-TestCommand "help" "help"
 Invoke-TestCommand "help-long" "--help"
 Invoke-TestCommand "help-short" "-h"
 
-# Test 2: List command
+# Test 2: List firmware command (now via flash --list)
 Write-TestHeader "Test 2: List Firmware"
-Invoke-TestCommand "list" "list"
+Invoke-TestCommand "list" "flash --list"
 
 # Test 3: Config commands
 Write-TestHeader "Test 3: Configuration"

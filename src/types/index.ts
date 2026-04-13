@@ -149,6 +149,16 @@ export interface BuildCommandItem {
 }
 
 /**
+ * COM port configuration with tags
+ */
+export interface ComPortConfig {
+  port: string;
+  tags: string[];
+  description?: string;
+  isActive?: boolean;
+}
+
+/**
  * CLI configuration file (dove.json)
  */
 export interface CLIConfig {
@@ -156,6 +166,7 @@ export interface CLIConfig {
   buildCommands?: BuildCommandItem[];
   buildGitBashPath?: string;
   defaultComPort?: string;
+  comPorts?: ComPortConfig[];
   workspacePath?: string;
 }
 

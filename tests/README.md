@@ -34,7 +34,7 @@ powershell -ExecutionPolicy Bypass -File .\tests\test-all.ps1 -ExePath ".\dove-v
 
 ### 功能测试
 - ✅ 帮助命令 (`help`, `--help`, `-h`)
-- ✅ 固件列表 (`list`)
+- ✅ 固件列表 (`flash --list`)
 - ✅ 配置显示 (`config`)
 - ✅ USB 设备枚举 (`devices`)
 - ✅ 串口列表 (`serial`)
