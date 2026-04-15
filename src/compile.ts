@@ -168,9 +168,10 @@ async function executeBuild(workspacePath: string, buildCommand: string, bashPat
   let taskCmd: string;
   let args: string[];
 
-  // Check if the command is a bash script (.sh file)
-  // Match .sh followed by space or end of string to handle cases like "build.sh -app"
+  // Check script type: .sh for Git Bash, .ps1 for PowerShell
+  // Match extension followed by space or end of string to handle cases like "build.sh -app"
   const isBash = /\.sh(\s|$)/i.test(buildCommand);
+  const isPowerShell = /\.ps1(\s|$)/i.test(buildCommand);
 
   if (isWindows()) {
     if (isBash) {
@@ -182,6 +183,10 @@ async function executeBuild(workspacePath: string, buildCommand: string, bashPat
       args = ['-c', `./${buildCommand}`];
       console.log(`Using Git Bash: ${gitBashPath}`);
       console.log(`PATH injected: ${gitBashBinDir}`);
+    } else if (isPowerShell) {
+      taskCmd = 'powershell.exe';
+      args = ['-ExecutionPolicy', 'Bypass', '-File', buildCommand];
+      console.log('Using PowerShell to execute .ps1 script');
     } else {
       taskCmd = 'cmd';
       args = ['/c', `${buildCommand}`];

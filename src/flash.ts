@@ -510,22 +510,22 @@ async function executeFlash(toolPath: string, toolType: string, firmwareFile: st
 
 interface DevicesOptions {
   json?: boolean;
+  returnResult?: boolean;
 }
 
 /**
- * List USB devices
+ * List USB devices (default JSON output)
  */
-export async function listDevices(options: DevicesOptions = {}): Promise<string[]> {
+export async function listDevices(options: DevicesOptions = {}): Promise<string[] | string> {
   if (!isWindows()) {
-    if (options.json) {
-      console.log(JSON.stringify({ devices: [], count: 0, error: 'Device list function only available on Windows' }));
-    } else {
-      console.log('Device list function only available on Windows');
-    }
+    const result = { devices: [], count: 0, error: 'Device list function only available on Windows' };
+    if (options.returnResult) return JSON.stringify(result, null, 2);
+    if (options.json) console.log(JSON.stringify(result, null, 2));
+    else console.log('Device list function only available on Windows');
     return [];
   }
-  
-  if (!options.json) {
+
+  if (!options.json && !options.returnResult) {
     console.log('Searching for USB devices...');
     console.log('='.repeat(50));
   }
@@ -559,6 +559,9 @@ export async function listDevices(options: DevicesOptions = {}): Promise<string[
       }
     }
     
+    if (options.returnResult) {
+      return JSON.stringify({ devices, count: devices.length }, null, 2);
+    }
     if (options.json) {
       console.log(JSON.stringify({ devices, count: devices.length }, null, 2));
     } else {
@@ -572,15 +575,14 @@ export async function listDevices(options: DevicesOptions = {}): Promise<string[
         });
       }
     }
-    
+
     return devices;
   } catch (error) {
     const err = error as Error;
-    if (options.json) {
-      console.log(JSON.stringify({ devices: [], count: 0, error: err.message }, null, 2));
-    } else {
-      console.error('Failed to get device list:', err.message);
-    }
+    const result = { devices: [], count: 0, error: err.message };
+    if (options.returnResult) return JSON.stringify(result, null, 2);
+    if (options.json) console.log(JSON.stringify(result, null, 2));
+    else console.error('Failed to get device list:', err.message);
     return [];
   }
 }

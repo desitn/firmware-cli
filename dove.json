@@ -1,8 +1,8 @@
 {
-  "firmwarePath": "",
+  "firmwarePath": "F:\\vscode-extension\\quick-dove\\quectel_build\\release",
   "buildCommands": [],
   "buildGitBashPath": "",
-  "defaultComPort": "",
+  "defaultComPort": "COM107",
   "language": "auto",
   "theme": {
     "mode": "auto",

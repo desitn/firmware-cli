@@ -3,54 +3,64 @@ import { findAllFirmwares, formatSize } from './utils';
 
 interface ListOptions {
   json?: boolean;
+  returnResult?: boolean;
 }
 
 /**
  * List available firmwares
  */
-export async function listFirmware(options: ListOptions = {}): Promise<FirmwareInfo[]> {
+export async function listFirmware(options: ListOptions = {}): Promise<FirmwareInfo[] | string> {
   const firmwares = findAllFirmwares();
-  
+
   if (firmwares.length === 0) {
+    const emptyResult = JSON.stringify({ firmwares: [], count: 0, recommended: null });
+    if (options.returnResult) {
+      return emptyResult;
+    }
     if (options.json) {
-      console.log(JSON.stringify({ firmwares: [], count: 0, recommended: null }));
+      console.log(emptyResult);
     } else {
       console.log('No firmware files found');
       console.log('Hint: Configure dove.json or use flash <path> command');
     }
     return [];
   }
-  
+
   // Recommend latest firmware
   const sortedFirmwares = firmwares.sort((a, b) => {
     const aIsFactory = a.name.toLowerCase().includes('factory');
     const bIsFactory = b.name.toLowerCase().includes('factory');
-    
+
     if (aIsFactory && !bIsFactory) return 1;
     if (!aIsFactory && bIsFactory) return -1;
-    
+
     return b.mtime.getTime() - a.mtime.getTime();
   });
-  
+
   const latest = sortedFirmwares[0];
-  
+
+  const jsonOutput = {
+    firmwares: firmwares.map(fw => ({
+      name: fw.name,
+      path: fw.path,
+      type: fw.type,
+      size: fw.size,
+      sizeFormatted: formatSize(fw.size),
+      time: fw.time
+    })),
+    count: firmwares.length,
+    recommended: {
+      name: latest.name,
+      path: latest.path,
+      type: latest.type
+    }
+  };
+
+  if (options.returnResult) {
+    return JSON.stringify(jsonOutput, null, 2);
+  }
+
   if (options.json) {
-    const jsonOutput = {
-      firmwares: firmwares.map(fw => ({
-        name: fw.name,
-        path: fw.path,
-        type: fw.type,
-        size: fw.size,
-        sizeFormatted: formatSize(fw.size),
-        time: fw.time
-      })),
-      count: firmwares.length,
-      recommended: {
-        name: latest.name,
-        path: latest.path,
-        type: latest.type
-      }
-    };
     console.log(JSON.stringify(jsonOutput, null, 2));
   } else {
     console.log(`Found ${firmwares.length} firmware(s):`);
@@ -62,10 +72,10 @@ export async function listFirmware(options: ListOptions = {}): Promise<FirmwareI
       console.log(`   Time: ${fw.time}`);
       console.log();
     });
-    
+
     console.log(`Recommended firmware: ${latest.name}`);
     console.log(`Flash command: dove.exe flash "${latest.path}"`);
   }
-  
+
   return firmwares;
 }

@@ -8,13 +8,14 @@
 
 嵌入式固件编译和烧录 CLI 工具，支持多种芯片平台的固件开发流程。
 
-## Features 
+## Features
 
-- **Multi-Platform Support**: ASR 160X/180X/190X, UNISOC 8310/8910/8850, Eigen 618/718
+- **Multi-Platform Support**: ASR 160X/180X/190X, UNISOC 8310/8910/8850, Eigen 618/718, ESP
 - **Auto Detection**: Automatic firmware type detection and port discovery
+- **Unified Port Commands**: Consistent `port` subcommand for all port operations
 - **Serial Monitoring**: Real-time serial port monitoring with filtering and logging
 - **AT Commands**: Interactive AT command execution with auto port detection
-- **AI Integration**: Designed for AI assistant integration (Cline, etc.)
+- **AI Integration**: Designed for AI assistant integration (Cline, Claude, etc.)
 - **Configuration Management**: JSON-based configuration with CLI management
 
 ## Quick Start
@@ -56,6 +57,26 @@ dove.exe <command> [arguments]
 
 ### Commands
 
+#### Compile Firmware
+```bash
+# Auto-find build command
+dove.exe build
+
+# List available build commands (JSON output)
+dove.exe build --list
+
+# Run command by index
+dove.exe build --index 1
+
+# Run command by name
+dove.exe build --name install
+```
+
+#### Build and Flash
+```bash
+dove.exe build-and-flash
+```
+
 #### Flash Firmware
 ```bash
 # Auto-find and flash firmware
@@ -66,117 +87,82 @@ dove.exe flash "C:/path/firmware.bin"
 
 # Skip auto entering download mode
 dove.exe flash --skip-dl-mode
-```
 
-#### List Available Firmware
-```bash
+# List available firmware (JSON output)
 dove.exe flash --list
 ```
 
-**Example Output:**
-```
-Firmware List
-==================================================
-Found 3 firmware(s):
+#### Port Operations (Unified)
 
-1. firmware_v1.2.3.zip
-   Type: ASR ABOOT
-   Size: 15.6 MB
-   Time: 2024/01/15 14:30:25
-   Path: C:/workspace/release/v1.2.3/firmware_v1.2.3.zip
+The `port` command provides unified interface for all port-related operations. All query commands output JSON by default for AI integration:
 
-2. firmware_v1.2.2.zip
-   Type: ASR ABOOT
-   Size: 15.4 MB
-   Time: 2024/01/14 09:15:10
-   Path: C:/workspace/release/v1.2.2/firmware_v1.2.2.zip
-```
-
-#### Flash Firmware
+##### List Ports (JSON output)
 ```bash
-# Auto-find and flash latest firmware
-dove.exe flash
+# List serial ports (JSON output)
+dove.exe port list
 
-# Flash specific firmware path
-dove.exe flash C:/path/to/firmware.zip
+# List USB devices (JSON output)
+dove.exe port list --usb
 
-# Skip download mode (for manual mode entry)
-dove.exe flash --skip-dl-mode
+# List both USB and serial ports (JSON output)
+dove.exe port list --all
 ```
 
-#### List USB Devices
-```bash
-dove.exe devices
-```
-
-#### List Serial Ports
-```bash
-dove.exe serial
-```
-
-#### Compile Firmware
-```bash
-# Auto-find build command
-dove.exe build
-
-# Specify build command
-dove.exe build "build_OPTfile.bat"
-```
-
-#### Build and Flash
-```bash
-dove.exe build-and-flash
-```
-
-#### Serial Port Monitoring
+##### Monitor Serial Port
 ```bash
 # Monitor with default settings
-dove.exe monitor -p COM107
+dove.exe port monitor -p COM9
 
 # Monitor with timeout and output file
-dove.exe monitor -p COM107 --timeout 30000 -o log.txt
+dove.exe port monitor -p COM9 --timeout 30000 -o log.txt
+
+# Select port by tag (uses comPorts config)
+dove.exe port monitor --tag Log --timeout 30000
 
 # Filter output (include only ERROR lines)
-dove.exe monitor -p COM107 --include "ERROR" -o errors.log
+dove.exe port monitor -p COM9 --include "ERROR" -o errors.log
 
 # JSON output for programmatic use
-dove.exe monitor -p COM107 --json --timeout 5000
+dove.exe port monitor -p COM9 --json --timeout 5000
+
+# Capture until specific text
+dove.exe port monitor -p COM9 --until "Done" -o boot.log
+
+# Capture N lines
+dove.exe port monitor -p COM9 --lines 100 -o debug.log
 ```
 
-#### Send AT Commands
+##### Send AT Commands (JSON output)
 ```bash
-# Auto-detect AT port and send command
-dove.exe at -c "ATI"
+# Auto-detect AT port and send command (JSON output)
+dove.exe port at -c "ATI"
 
-# Specify port
-dove.exe at -p COM107 -c "AT+CGMI"
+# Specify port (JSON output)
+dove.exe port at -p COM107 -c "AT+CGMI"
 
-# JSON output
-dove.exe at -c "ATI" --json
+# Select port by tag (JSON output)
+dove.exe port at --tag AT -c "ATI"
+
+# Device reset (requires confirmation in AI skill)
+dove.exe port at -c "AT+CFUN=1,1" --timeout 10000
 ```
 
-**Example Output:**
-```
-AT Command Result
-==================================================
-Port: COM107
-Command: ATI
-Duration: 245ms
-
-Response:
-Quectel
-EC200U
-Revision: EC200UCNLBR03A02M08
-
-Status: OK
+**Example JSON Output:**
+```json
+{
+  "success": true,
+  "response": "ATI\r\nQuectel\nEC200U\nRevision: EC200UCNLBR03A02M08\nOK",
+  "port": "COM107",
+  "duration": 245
+}
 ```
 
-#### Configuration Management
+#### Configuration Management (JSON output)
 ```bash
-# Show current configuration
+# Show current configuration (JSON output)
 dove.exe config
 
-# Set configuration values
+# Set configuration values (JSON output)
 dove.exe config set firmwarePath "C:/path/to/firmware"
 dove.exe config set buildCommand "build_OPTfile.bat"
 dove.exe config set buildGitBashPath "C:/Program Files/Git/bin/bash.exe"
@@ -197,22 +183,54 @@ Create `dove.json` in your project root:
 ```json
 {
   "firmwarePath": "",
-  "buildCommand": "",
+  "buildCommands": [],
   "buildGitBashPath": "",
-  "defaultComPort": ""
+  "defaultComPort": "",
+  "comPorts": [
+    { "port": "COM9", "tags": ["AT"], "isActive": true },
+    { "port": "COM10", "tags": ["Log", "Debug"] }
+  ]
 }
 ```
 
 | Field | Description | Default |
 |-------|-------------|---------|
 | `firmwarePath` | Path to firmware files or directory | Auto-detect |
-| `buildCommand` | Build script/command | Auto-detect |
+| `buildCommands` | Build scripts/commands | Auto-detect |
 | `buildGitBashPath` | Path to Git Bash executable | System PATH |
 | `defaultComPort` | Default serial port for monitoring | None |
+| `comPorts` | Port configurations with tags | None |
+
+### Using Port Tags
+
+Port tags allow AI assistants to automatically select appropriate ports:
+
+```json
+{
+  "comPorts": [
+    { "port": "COM107", "tags": ["AT"], "isActive": true },
+    { "port": "COM108", "tags": ["Log", "Debug"] },
+    { "port": "COM109", "tags": ["Download"] }
+  ]
+}
+```
+
+Available tags:
+- **AT**: AT command port
+- **Log**: Log monitoring port
+- **Debug**: Debug output port
+- **Download**: Firmware download port
+- **UART**: General serial communication
+
+Usage:
+```bash
+dove.exe port monitor --tag Log --timeout 30000
+dove.exe port at --tag AT -c "ATI"
+```
 
 ### Tool Configuration
 
-Tool configurations are stored in `tools/config/` directory with the following structure:
+Tool configurations are stored in `tools/config/` directory:
 
 ```
 tools/config/
@@ -224,58 +242,6 @@ tools/config/
 └── esp.json             # ESP platform configuration
 ```
 
-Each platform configuration file contains:
-- **platform**: Platform-specific settings (extensions, serial config, progress patterns)
-- **tool**: Download tool configuration (name, path, arguments)
-
-Example (`tools/config/asr160x.json`):
-```json
-{
-  "platform": {
-    "type": "ad",
-    "extensions": [".zip"],
-    "description": "ASR 160X Series",
-    "serial": {
-      "atPortPatterns": ["at port", "modem"],
-      "atCommand": "AT+QDOWNLOAD=1",
-      "baudrate": 115200,
-      "autoEnterDlMode": true,
-      "downloadPortPatterns": ["download"],
-      "downloadPortVidPid": [
-        { "vid": "2ECC", "pid": "3004", "desc": "BOOT" }
-      ]
-    },
-    "progressPatterns": {
-      "started": ["CONNECTING"],
-      "downloading": ["RUNNING"],
-      "completed": ["SUCCEEDED"],
-      "error": ["error", "timeout"]
-    }
-  },
-  "tool": {
-    "name": "adownload",
-    "path": "adownload.exe",
-    "description": "ASR 160X Download Tool",
-    "args": {
-      "flash": ["-r", "-q", "-a", "-u", "-s", "115200", "{firmwarePath}"],
-      "default": []
-    }
-  }
-}
-```
-
-### Adding New Platform Support
-
-To add support for a new chip platform:
-
-1. Create a new JSON file in `tools/config/` (e.g., `newplatform.json`)
-2. Define the platform configuration with:
-   - `platform.type`: Tool type identifier
-   - `platform.extensions`: Supported file extensions
-   - `platform.serial`: Serial port configuration
-   - `tool`: Download tool configuration (if applicable)
-3. Place the download tool executable in `tools/` directory
-
 ## Supported Firmware Types
 
 | Platform | Chip Models | File Extension | Description |
@@ -284,56 +250,16 @@ To add support for a new chip platform:
 | **ASR** | 180X/190X | `*_fbf.bin` | ASR FBF format |
 | **UNISOC** | 8310/8910/8850 | `*.pac` | UNISOC PAC format |
 | **Eigen** | 618/718 | `*_download_usb.ini` | Eigen ECF format |
-
-## Progress Display Options
-
-The firmware flash tool supports two progress display modes:
-
-### Single-line Mode (Default)
-- Uses `\r` to update the same line
-- Suitable for terminal user interaction
-- Display: `[====================] 50% Downloading...`
-
-### Multi-line Mode
-- Outputs new line for each update
-- Suitable for UI program parsing
-- Display:
-  ```
-  [2024-01-15 14:30:25] Progress: 50%
-  [2024-01-15 14:30:26] Progress: 51%
-  ```
-
-### Configuration
-
-Set progress mode in `tools/config/global.json`:
-
-```json
-{
-  "outputConfig": {
-    "progressMode": "single-line", // "single-line" or "multi-line"
-    "verbose": false,
-    "timestamp": false
-  }
-}
-```
-
-### Command Line Options
-
-```bash
-# Single-line mode (default)
-dove.exe flash --progress single-line
-
-# Multi-line mode
-dove.exe flash --progress multi-line
-```
+| **ESP** | - | `*.bin` | ESP binary format |
 
 ## Serial Monitoring Options
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `-p, --port` | Serial port (e.g., COM107) | Required or from config |
+| `-p, --port` | Serial port (e.g., COM9) | Required or from config |
+| `--tag` | Select port by tag | None |
 | `-b, --baud` | Baud rate | 115200 |
-| `-t, --timeout` | Timeout in milliseconds | 0 (no timeout) |
+| `--timeout` | Timeout in milliseconds | 0 (no timeout) |
 | `-o, --output` | Output file path | None |
 | `-a, --append` | Append to file (default: overwrite) | false |
 | `--include` | Include lines containing keywords (comma-separated) | None |
@@ -358,16 +284,15 @@ dove.exe flash --progress multi-line
 ### "Download tool not found"
 - Verify `tools/` directory exists and contains required executables
 - Check `tools/config/` directory for platform configuration files
-- Verify tool path in platform configuration (e.g., `tools/config/asr160x.json`)
 
 ### "Build command not found"
-- Configure build command: `dove.exe config set buildCommand "build_OPTfile.bat"`
-- Ensure build script exists in your workspace
+- Use `dove.exe build --list` to see available commands
+- Configure build command: `dove.exe config set buildCommands ["build.bat"]`
 
 ### "AT port not found"
 - Check USB connection and drivers
-- Try specifying port manually: `dove.exe at -p COM107 -c "ATI"`
-- List available ports: `dove.exe serial`
+- Try specifying port manually: `dove.exe port at -p COM107 -c "ATI"`
+- List available ports: `dove.exe port list`
 
 ### "Serial port access denied"
 - Close other applications using the serial port
@@ -388,50 +313,18 @@ dove/
 │   └── types/             # TypeScript type definitions
 ├── tools/                 # Download tools and config
 │   ├── config/            # Platform configurations
-│   │   ├── global.json    # Global settings
-│   │   ├── asr160x.json   # ASR 160X platform
-│   │   ├── asr1x03.json   # ASR 180X/190X platform
-│   │   ├── unisoc.json    # UNISOC platform
-│   │   ├── eigen.json     # Eigen platform
-│   │   └── esp.json       # ESP platform
 │   ├── adownload.exe      # ASR 160X tool
 │   ├── FBFDownloader.exe  # ASR 180X/190X tool
 │   └── pacdownload/       # UNISOC tools
 ├── dist/                  # Compiled JavaScript
 ├── skill/                 # AI skill integration
-│   └── dove/
-│       ├── SKILL.md       # AI assistant documentation
-│       └── scripts/       # Distribution scripts
+│   ├── dove-action/       # High-risk operations (flash, build)
+│   └── dove-query/        # Low-risk queries (list, devices, config)
 ├── tests/                 # Test scripts
 ├── package.json           # Node.js dependencies
 ├── tsconfig.json          # TypeScript configuration
 └── README.md              # This file
 ```
-
-## Adding New Platform Support
-
-To add support for a new chip platform:
-
-1. **Add tool configuration** in `tools/tools-config.json`:
-```json
-"newplatform": {
-  "type": "newtype",
-  "extensions": [".ext"],
-  "description": "New Platform",
-  "serial": {
-    "atPortPatterns": ["at port"],
-    "atCommand": "AT+DOWNLOAD=1",
-    "baudrate": 115200,
-    "autoEnterDlMode": true,
-    "downloadPortPatterns": ["download"],
-    "downloadPortVidPid": [{ "vid": "1234", "pid": "5678" }]
-  }
-}
-```
-
-2. **Add download tool** to `tools/` directory
-
-3. **Update type definitions** in `src/types/index.ts`
 
 ## Building from Source
 
@@ -461,44 +354,30 @@ npm run build:watch
 
 ## AI Assistant Integration
 
-This CLI tool is designed for seamless AI assistant integration. AI tools can:
+This CLI tool is designed for seamless AI assistant integration. Key features:
 
-- Execute commands via natural language
-- Parse JSON output for structured data
-- Monitor serial ports for automated testing
-- Send AT commands for device control
+- **Default JSON Output**: All query commands output JSON by default for easy parsing
+- **Structured Responses**: AT commands, port lists, config, firmware lists all return JSON
+- **Natural Language Execution**: AI tools can execute commands via natural language
+- **Serial Monitoring**: Real-time serial port monitoring for automated testing
+- **AT Commands**: Query device info without confirmation, destructive commands require confirmation
 
-Example AI interactions:
-- "Flash the latest firmware"
-- "Monitor COM107 for errors and save to log"
-- "Send ATI command and show the response"
-- "Build and flash the project"
+### JSON Output Commands
 
-See `skill/dove/SKILL.md` for detailed AI integration documentation.
+| Command | Output | Description |
+|---------|--------|-------------|
+| `port list` | JSON | Serial/USB port information |
+| `port at -c "..."` | JSON | AT command response |
+| `flash --list` | JSON | Available firmware files |
+| `build --list` | JSON | Build commands list |
+| `config` | JSON | Current configuration |
+| `config set` | JSON | Configuration update result |
 
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## Changelog
-
-### v1.0.0 (2024-01)
-- Initial release
-- Support for ASR 160X/180X/190X, UNISOC, Eigen platforms
-- Serial monitoring with filtering
-- AT command interface
-- Configuration management
-- AI assistant integration
+See `skill/dove-action/SKILL.md` and `skill/dove-query/SKILL.md` for detailed AI integration documentation.
 
 ## License
 
-MIT License - see LICENSE file for details
+MIT License - see LICENSE file for details.
 
 ## Support
 

@@ -1,7 +1,7 @@
 {
   "name": "dove",
   "version": "1.0.0",
-  "description": "CLI tool for firmware compilation and flashing, supports AI assistant integration",
+  "description": "Release a dove, deliver your firmware",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -48,6 +48,8 @@
   "devDependencies": {
     "@types/adm-zip": "^0.5.8",
     "@types/node": "^25.5.0",
+    "@types/react": "^19.2.14",
+    "react": "^18.3.1",
     "rimraf": "^6.1.3",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"

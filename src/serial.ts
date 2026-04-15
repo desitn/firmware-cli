@@ -412,19 +412,24 @@ export async function enterDownloadMode(
 /**
  * Show serial port list
  */
-export async function showSerialList(): Promise<void> {
+export async function showSerialList(options: { json?: boolean } = {}): Promise<SerialPortInfo[] | void> {
+  const ports = await listSerialPorts();
+
+  if (options.json) {
+    console.log(JSON.stringify({ ports, count: ports.length }, null, 2));
+    return ports;
+  }
+
   console.log('Serial Port List');
   console.log('='.repeat(70));
-  
-  const ports = await listSerialPorts();
-  
+
   if (ports.length === 0) {
     console.log('No serial ports found');
     return;
   }
-  
+
   console.log(`Found ${ports.length} serial port(s):\n`);
-  
+
   ports.forEach((port, index) => {
     console.log(`${index + 1}. ${port.path}`);
     console.log(`   Manufacturer: ${port.manufacturer}`);
@@ -432,6 +437,8 @@ export async function showSerialList(): Promise<void> {
     console.log(`   Description: ${port.fullDescription.substring(0, 100)}`);
     console.log('-'.repeat(70));
   });
+
+  return ports;
 }
 
 /**
