@@ -10,9 +10,20 @@ import type {
   EnterDownloadModeResult,
   MonitorOptions,
   MonitorResult,
-  PlatformSerialConfig
+  PlatformSerialConfig,
+  ComPortConfig,
+  PortTag
 } from './types';
 import { loadToolsConfig, loadConfig } from './utils';
+
+/**
+ * Get tag from port config (compatible with both new and legacy format)
+ */
+function getPortTag(portConfig: ComPortConfig): PortTag | null {
+  if (portConfig.tag) return portConfig.tag;
+  if (portConfig.tags && portConfig.tags.length > 0) return portConfig.tags[0] as PortTag;
+  return null;
+}
 
 interface PortInfo {
   path: string;
@@ -416,13 +427,12 @@ export async function showSerialList(options: { json?: boolean; plain?: boolean 
   const config = loadConfig() as any || {};
   const comPorts = config.comPorts || [];
 
-  // Merge tags into port info
+  // Merge tags into port info (compatible with both formats)
   const portsWithTags = ports.map(port => {
-    const portConfig = comPorts.find((p: any) => p.port === port.path);
+    const portConfig = comPorts.find((p: ComPortConfig) => p.port === port.path);
     return {
       ...port,
-      tags: portConfig?.tags || [],
-      isActive: portConfig?.isActive || false
+      tag: portConfig ? getPortTag(portConfig) : null
     };
   });
 
@@ -431,7 +441,7 @@ export async function showSerialList(options: { json?: boolean; plain?: boolean 
     return portsWithTags;
   }
 
-  // Plain format for TUI - show friendly name with tags
+  // Plain format for TUI - show friendly name with tag
   if (options.plain) {
     if (portsWithTags.length === 0) {
       return 'No serial ports found';
@@ -439,8 +449,8 @@ export async function showSerialList(options: { json?: boolean; plain?: boolean 
     const lines: string[] = [];
     lines.push(`Found ${portsWithTags.length} port(s):`);
     portsWithTags.forEach((port, index) => {
-      const tags = port.tags && port.tags.length > 0 ? ` [${port.tags.join(', ')}]` : '';
-      lines.push(`  ${index + 1}. ${port.friendlyName}${tags}`);
+      const tagStr = port.tag ? ` [${port.tag}]` : '';
+      lines.push(`  ${index + 1}. ${port.friendlyName}${tagStr}`);
     });
     return lines.join('\n');
   }
@@ -456,8 +466,8 @@ export async function showSerialList(options: { json?: boolean; plain?: boolean 
   console.log(`Found ${portsWithTags.length} serial port(s):\n`);
 
   portsWithTags.forEach((port, index) => {
-    const tags = port.tags && port.tags.length > 0 ? ` [${port.tags.join(', ')}]` : '';
-    console.log(`${index + 1}. ${port.path}${tags}`);
+    const tagStr = port.tag ? ` [${port.tag}]` : '';
+    console.log(`${index + 1}. ${port.path}${tagStr}`);
     console.log(`   Description: ${port.friendlyName}`);
     console.log('-'.repeat(70));
   });

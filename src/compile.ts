@@ -318,11 +318,8 @@ export async function setConfig(key: string, value: string): Promise<void> {
   } else if (key === 'buildGitBashPath') {
     config.buildGitBashPath = value;
     console.log(`Set Git Bash path: ${value}`);
-  } else if (key === 'defaultComPort') {
-    config.defaultComPort = value;
-    console.log(`Set default COM port: ${value}`);
   } else {
-    throw new Error(`Unknown config item: ${key}`);
+    throw new Error(`Unknown config item: ${key}. Valid items: firmwarePath, buildGitBashPath`);
   }
   
   saveConfig(config);
@@ -339,7 +336,13 @@ export async function showConfig(): Promise<void> {
   console.log('='.repeat(50));
   console.log(`Firmware path: ${config.firmwarePath || 'Not set'}`);
   console.log(`Git Bash: ${config.buildGitBashPath || 'Not set'}`);
-  console.log(`Default COM port: ${config.defaultComPort || 'Not set'}`);
+
+  if (config.comPorts && config.comPorts.length > 0) {
+    console.log('COM Ports:');
+    config.comPorts.forEach(p => {
+      console.log(`  ${p.port}: [${p.tag}]`);
+    });
+  }
 
   if (config.buildCommands && config.buildCommands.length > 0) {
     const activeCmd = config.buildCommands.find(cmd => cmd.isActive);

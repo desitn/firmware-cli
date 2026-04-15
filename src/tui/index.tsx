@@ -12,6 +12,152 @@ import { findAllFirmwares, formatSize } from '../utils';
 import { listSerialPorts, enterDownloadMode, findDownloadPort } from '../serial';
 import type { FirmwareInfo, SerialPortInfo, PlatformConfig, ProgressPatterns } from '../types';
 
+// ============================================================
+// List Selector - Universal partial refresh for list navigation
+// ============================================================
+
+type ListType = 'main' | 'build' | 'flash' | 'ports' | 'port-tag' | 'settings' | 'theme';
+
+// List base line offsets (line number where first item appears)
+const listBaseLines: Record<ListType, number> = {
+  'main':       5,  // After header 1-3, title 4
+  'build':      6,  // After header 1-3, title 4, count 5
+  'flash':      6,  // After header 1-3, title 4, count 5
+  'ports':      6,  // After header 1-3, title 4, count 5
+  'port-tag':   7,  // After header 1-3, title 4, info 5-6
+  'settings':   5,  // After header 1-3, title 4
+  'theme':      6,  // After header 1-3, title 4, blank 5
+};
+
+// Render item line for each list type
+function renderListItem(type: ListType, index: number, isSelected: boolean): string {
+  const theme = getThemeColor();
+  const config = loadConfig() as any || {};
+  const mark = isSelected ? theme.primary + '❯' + COLOR_RESET : ' ';
+
+  switch (type) {
+    case 'main':
+      const mainPrefix = isSelected ? theme.primary + '❯' + COLOR_RESET + ' ' : '  ';
+      const mainColor = isSelected ? COLOR_BOLD + theme.primary : '';
+      return `${mainPrefix}${mainColor}${index + 1}. ${menuItems[index].label}${COLOR_RESET}`;
+
+    case 'build':
+      if (buildCommands.length === 0) return '';
+      const cmd = buildCommands[index];
+      const activeBuild = cmd.isActive ? COLOR_GREEN + ' *' + COLOR_RESET : '';
+      return ` ${mark} ${index + 1}. ${cmd.name}: ${cmd.command}${activeBuild}`;
+
+    case 'flash':
+      if (firmwareList.length === 0) return '';
+      const fw = firmwareList[index];
+      const recFlash = index === 0 ? COLOR_GREEN + ' *' + COLOR_RESET : '';
+      return ` ${mark} ${index + 1}. ${fw.name} (${fw.type}) ${formatSize(fw.size)}${recFlash}`;
+
+    case 'ports':
+      if (portList.length === 0) return '';
+      const port = portList[index];
+      const maxNameWidth = Math.max(35, ...portList.slice(0, 8).map(p => displayWidth(p.friendlyName)));
+      const paddedName = padDisplay(port.friendlyName, maxNameWidth);
+      const tagsPort = port.tags.length > 0 ? COLOR_GREEN + '[' + port.tags.join(', ') + ']' + COLOR_RESET : COLOR_DIM + '[未标记]' + COLOR_RESET;
+      return ` ${mark} ${index + 1}. ${paddedName} ${tagsPort}`;
+
+    case 'port-tag':
+      const portForTag = portList[selectedPort];
+      const tagItem = portTags[index];
+      const hasTag = portForTag?.tags.includes(tagItem);
+      const checkTag = hasTag ? COLOR_GREEN + '✓' + COLOR_RESET : ' ';
+      return ` ${mark} ${index + 1}. ${tagItem} ${checkTag}`;
+
+    case 'settings':
+      const settingItem = settingsItems[index];
+      let valueStr: string;
+      if (settingItem.type === 'ports') {
+        valueStr = COLOR_DIM + '(' + portList.length + ' ports)' + COLOR_RESET;
+      } else if (settingItem.type === 'array') {
+        const value = getConfigValue(config, settingItem.key, settingItem.type);
+        valueStr = COLOR_DIM + '(' + value + ' items)' + COLOR_RESET;
+      } else if (settingItem.type === 'theme') {
+        const currentTheme = config.theme?.color || 'cyan';
+        const themeColorCode = themeColorMap[currentTheme]?.primary || themeColorMap.cyan.primary;
+        valueStr = themeColorCode + currentTheme + COLOR_RESET;
+      } else {
+        const value = getConfigValue(config, settingItem.key, settingItem.type);
+        valueStr = value ? COLOR_DIM + truncate(value, 30) + COLOR_RESET : COLOR_DIM + '(not set)' + COLOR_RESET;
+      }
+      return ` ${mark} ${index + 1}. ${settingItem.label}: ${valueStr}`;
+
+    case 'theme':
+      const currentTheme = (config as any).theme?.color || 'cyan';
+      const colorName = themeColorNames[index];
+      const colorCode = themeColorMap[colorName]?.primary || '';
+      const checkTheme = colorName === currentTheme ? COLOR_GREEN + ' ✓' + COLOR_RESET : '';
+      return ` ${mark} ${index + 1}. ${colorCode}${colorName}${COLOR_RESET}${checkTheme}`;
+
+    default:
+      return '';
+  }
+}
+
+// Universal update selection - partial refresh without full screen render
+function updateListSelection(type: ListType, oldIndex: number, newIndex: number): void {
+  const baseLine = listBaseLines[type];
+
+  // Get list length for bounds check
+  const listLengths: Record<ListType, number> = {
+    'main': menuItems.length,
+    'build': Math.min(8, buildCommands.length),
+    'flash': Math.min(8, firmwareList.length),
+    'ports': Math.min(8, portList.length),
+    'port-tag': portTags.length,
+    'settings': settingsItems.length,
+    'theme': themeColorNames.length,
+  };
+
+  const maxLen = listLengths[type];
+
+  // Clear old selection
+  if (oldIndex >= 0 && oldIndex < maxLen) {
+    const oldLine = renderListItem(type, oldIndex, false);
+    process.stdout.write(`\x1b[${baseLine + oldIndex}H\x1b[2K${oldLine}`);
+  }
+
+  // Set new selection
+  if (newIndex >= 0 && newIndex < maxLen) {
+    const newLine = renderListItem(type, newIndex, true);
+    process.stdout.write(`\x1b[${baseLine + newIndex}H\x1b[2K${newLine}`);
+  }
+}
+
+// ============================================================
+// Theme & Color Configuration
+// ============================================================
+
+// Theme colors - ANSI escape codes
+const themeColorMap: Record<string, { primary: string; accent: string }> = {
+  cyan:    { primary: '\x1b[36m', accent: '\x1b[36m' },
+  blue:    { primary: '\x1b[34m', accent: '\x1b[34m' },
+  green:   { primary: '\x1b[32m', accent: '\x1b[32m' },
+  magenta: { primary: '\x1b[35m', accent: '\x1b[35m' },
+  yellow:  { primary: '\x1b[33m', accent: '\x1b[33m' },
+  red:     { primary: '\x1b[31m', accent: '\x1b[31m' },
+  white:   { primary: '\x1b[37m', accent: '\x1b[37m' }
+};
+
+// Get theme color from config
+function getThemeColor(): { primary: string; accent: string } {
+  const config = loadConfig() as any;
+  const theme = config?.theme?.color || 'cyan';
+  return themeColorMap[theme] || themeColorMap.cyan;
+}
+
+// Color constants
+const COLOR_RESET = '\x1b[0m';
+const COLOR_BOLD = '\x1b[1m';
+const COLOR_DIM = '\x1b[2m';
+const COLOR_GREEN = '\x1b[32m';
+const COLOR_RED = '\x1b[31m';
+const COLOR_YELLOW = '\x1b[33m';
+
 // State variables
 let currentView = 'main';
 let selectedMenu = 0;
@@ -52,10 +198,15 @@ let selectedTag = 0;
 const settingsItems = [
   { key: 'workspacePath', label: 'Workspace Path', type: 'path' },
   { key: 'firmwarePath', label: 'Firmware Path', type: 'path' },
+  { key: 'theme', label: 'Theme Color', type: 'theme' },
   { key: 'buildCommands', label: 'Build Commands', type: 'array' },
   { key: 'ports', label: 'Ports', type: 'ports' },  // Entry to Ports config
 ];
 let selectedSetting = 0;
+
+// Theme color options (color names array)
+const themeColorNames = ['cyan', 'blue', 'green', 'magenta', 'yellow', 'red', 'white'];
+let selectedThemeColor = 0;
 
 // Settings edit state
 let editingSettingKey = '';
@@ -190,7 +341,6 @@ function getSpinner(): string {
   return spinnerChars[spinnerIndex];
 }
 
-// Helper: update progress line only (without full screen refresh)
 function updateProgressLine(): void {
   // If log is shown, need full render to update log content
   if (showFlashLog) {
@@ -200,9 +350,9 @@ function updateProgressLine(): void {
 
   const spinner = getSpinner();
   const statusText = getFlashStatusText(flashStatus);
-  const statusColor = flashStatus === 'completed' ? '\x1b[32m' : flashStatus === 'error' ? '\x1b[31m' : '\x1b[33m';
-  // Progress is on line 5: (header line 1-3, sub-header line 4, progress line 5)
-  const line = `\x1b[5H\x1b[2K${spinner} ${flashProgress}% ${statusColor}${statusText}\x1b[0m`;
+  const statusColor = flashStatus === 'completed' ? COLOR_GREEN : flashStatus === 'error' ? COLOR_RED : COLOR_YELLOW;
+  // Progress is on line 6: (header 1-3, title 4, firmware info 5, progress 6)
+  const line = `\x1b[6H\x1b[2K${spinner} ${flashProgress}% ${statusColor}${statusText}${COLOR_RESET}`;
   process.stdout.write(line);
 }
 
@@ -426,15 +576,28 @@ async function flashFirmwareWithProgress(firmwarePath: string): Promise<void> {
   });
 }
 
-function renderScreen(): void {
+// Track previous view line count for clearing extra lines
+let prevViewLines = 0;
+
+function renderScreen(fullClear: boolean = false): void {
   process.stdout.write('\x1b[?25l'); // Hide cursor
-  process.stdout.write('\x1b[2J\x1b[H'); // Clear screen
+
+  // Only clear screen on exit (fullClear=true)
+  if (fullClear) {
+    process.stdout.write('\x1b[2J\x1b[H');
+  } else {
+    // Move cursor to home position without clearing
+    process.stdout.write('\x1b[H');
+  }
 
   const workspace = findWorkspacePath() || 'not found';
   // Extract only the last folder name for display
   const workspaceName = workspace !== 'not found' ? workspace.split(/[\\/]/).pop() || workspace : 'not found';
   const config = loadConfig() as any || {};
   const termWidth = getTerminalWidth();
+
+  // Get theme color
+  const theme = getThemeColor();
 
   let lines: string[] = [];
 
@@ -443,157 +606,195 @@ function renderScreen(): void {
   const titleWidth = 11;
   const padding = Math.floor((termWidth - titleWidth) / 2);
 
-  lines.push('\x1b[36m' + '─'.repeat(termWidth) + '\x1b[0m');
-  lines.push('\x1b[1m\x1b[36m' + ' '.repeat(padding) + title + ' '.repeat(termWidth - padding - titleWidth) + '\x1b[0m');
-  lines.push('\x1b[36m' + '─'.repeat(termWidth) + '\x1b[0m');
+  lines.push(theme.primary + '─'.repeat(termWidth) + COLOR_RESET);
+  lines.push(COLOR_BOLD + theme.primary + ' '.repeat(padding) + title + ' '.repeat(termWidth - padding - titleWidth) + COLOR_RESET);
+  lines.push(theme.primary + '─'.repeat(termWidth) + COLOR_RESET);
 
   if (currentView === 'main') {
-    lines.push('\x1b[1m\x1b[36mWhat would you like to do?\x1b[0m');
+    lines.push(COLOR_BOLD + theme.primary + 'What would you like to do?' + COLOR_RESET);
     menuItems.forEach((item, i) => {
       const isSelected = i === selectedMenu;
-      const prefix = isSelected ? '\x1b[36m❯\x1b[0m ' : '  ';
-      const color = isSelected ? '\x1b[1m\x1b[36m' : '';
-      lines.push(`${prefix}${color}${i + 1}. ${item.label}\x1b[0m`);
+      const prefix = isSelected ? theme.primary + '❯' + COLOR_RESET + ' ' : '  ';
+      const color = isSelected ? COLOR_BOLD + theme.primary : '';
+      lines.push(`${prefix}${color}${i + 1}. ${item.label}${COLOR_RESET}`);
     });
     lines.push('');
-    lines.push('\x1b[2m↑/↓ navigate | Enter select | Q quit\x1b[0m');
+    lines.push(COLOR_DIM + '↑/↓ navigate | Enter select | Q quit' + COLOR_RESET);
   } else if (currentView === 'build') {
-    lines.push('\x1b[1m\x1b[36mBuild Commands\x1b[0m');
+    lines.push(COLOR_BOLD + theme.primary + 'Build Commands' + COLOR_RESET);
     if (isExecuting) {
-      lines.push('\x1b[33m⏳ Building...\x1b[0m');
-      lines.push('\x1b[2mPlease wait...\x1b[0m');
+      lines.push(COLOR_YELLOW + '⏳ Building...' + COLOR_RESET);
+      lines.push(COLOR_DIM + 'Please wait...' + COLOR_RESET);
     } else if (buildCommands.length > 0) {
       lines.push(`Found ${buildCommands.length} build command(s):`);
       buildCommands.slice(0, 8).forEach((cmd, i) => {
-        const mark = i === selectedBuild ? '\x1b[36m❯\x1b[0m' : ' ';
-        const active = cmd.isActive ? '\x1b[32m *\x1b[0m' : '';
+        const mark = i === selectedBuild ? theme.primary + '❯' + COLOR_RESET : ' ';
+        const active = cmd.isActive ? COLOR_GREEN + ' *' + COLOR_RESET : '';
         lines.push(` ${mark} ${i + 1}. ${cmd.name}: ${cmd.command}${active}`);
       });
       if (buildCommands.length > 8) {
         lines.push(`   ... and ${buildCommands.length - 8} more`);
       }
       lines.push('');
-      lines.push('\x1b[2m[↑/↓] navigate | [1-8] select | [Enter] build | [Esc] back\x1b[0m');
+      lines.push(COLOR_DIM + '[↑/↓] navigate | [1-8] select | [Enter] build | [Esc] back' + COLOR_RESET);
     } else {
-      lines.push('\x1b[2mNo build commands configured\x1b[0m');
-      lines.push('\x1b[2mAdd commands in dove.json | [Esc] back\x1b[0m');
+      lines.push(COLOR_DIM + 'No build commands configured' + COLOR_RESET);
+      lines.push(COLOR_DIM + 'Add commands in dove.json | [Esc] back' + COLOR_RESET);
     }
   } else if (currentView === 'flash') {
-    lines.push('\x1b[1m\x1b[36mFlash Firmware\x1b[0m');
+    lines.push(COLOR_BOLD + theme.primary + 'Flash Firmware' + COLOR_RESET);
     if (isExecuting) {
-      // Show progress during execution
+      // Show firmware info
+      const fw = firmwareList[selectedFirmware];
+      if (fw) {
+        lines.push(COLOR_DIM + 'Firmware: ' + COLOR_RESET + truncate(fw.name, 40) + ' (' + fw.type + ', ' + formatSize(fw.size) + ')');
+      }
+
+      // Show progress line
       const spinner = spinnerChars[spinnerIndex];
       const statusText = getFlashStatusText(flashStatus);
-      const statusColor = flashStatus === 'completed' ? '\x1b[32m' : flashStatus === 'error' ? '\x1b[31m' : '\x1b[33m';
-      lines.push(`${spinner} ${flashProgress}% ${statusColor}${statusText}\x1b[0m`);
+      const statusColor = flashStatus === 'completed' ? COLOR_GREEN : flashStatus === 'error' ? COLOR_RED : COLOR_YELLOW;
+      lines.push(`${spinner} ${flashProgress}% ${statusColor}${statusText}${COLOR_RESET}`);
 
-      // Show log if enabled (Ctrl+O)
+      // Show log if enabled (Ctrl+O) - fill remaining terminal space
       if (showFlashLog && flashLogBuffer.length > 0) {
         lines.push('');
-        lines.push('\x1b[2m─── Output Log (Ctrl+O to hide) ───\x1b[0m');
-        flashLogBuffer.slice(-10).forEach(line => {
-          lines.push('\x1b[2m' + truncate(line, termWidth - 4) + '\x1b[0m');
+        lines.push(COLOR_DIM + '─── Output Log (Ctrl+O to hide) ───' + COLOR_RESET);
+        // Show up to 15 lines of log to fill more terminal space
+        flashLogBuffer.slice(-15).forEach(line => {
+          lines.push(COLOR_DIM + truncate(line, termWidth - 4) + COLOR_RESET);
         });
+      } else {
+        lines.push('');
+        lines.push(COLOR_DIM + 'Press Ctrl+O to view output log' + COLOR_RESET);
       }
       lines.push('');
-      lines.push('\x1b[2m[Ctrl+O] toggle log | [Esc] cancel\x1b[0m');
+      lines.push(COLOR_DIM + '[Ctrl+O] toggle log | [Esc] cancel' + COLOR_RESET);
     } else if (firmwareList.length > 0) {
       lines.push(`Found ${firmwareList.length} firmware(s):`);
       firmwareList.slice(0, 8).forEach((fw, i) => {
-        const mark = i === selectedFirmware ? '\x1b[36m❯\x1b[0m' : ' ';
-        const rec = i === 0 ? '\x1b[32m *\x1b[0m' : '';
+        const mark = i === selectedFirmware ? theme.primary + '❯' + COLOR_RESET : ' ';
+        const rec = i === 0 ? COLOR_GREEN + ' *' + COLOR_RESET : '';
         lines.push(` ${mark} ${i + 1}. ${fw.name} (${fw.type}) ${formatSize(fw.size)}${rec}`);
       });
       if (firmwareList.length > 8) {
         lines.push(`   ... and ${firmwareList.length - 8} more`);
       }
       lines.push('');
-      lines.push('\x1b[2m[↑/↓] navigate | [1-8] select | [Enter] flash | [R] refresh | [Esc] back\x1b[0m');
+      lines.push(COLOR_DIM + '[↑/↓] navigate | [1-8] select | [Enter] flash | [R] refresh | [Esc] back' + COLOR_RESET);
     } else {
-      lines.push('\x1b[2mNo firmware found\x1b[0m');
-      lines.push('\x1b[2m[R] refresh | [Esc] back\x1b[0m');
+      lines.push(COLOR_DIM + 'No firmware found' + COLOR_RESET);
+      lines.push(COLOR_DIM + '[R] refresh | [Esc] back' + COLOR_RESET);
     }
   } else if (currentView === 'ports') {
-    lines.push('\x1b[1m\x1b[36mSerial Ports\x1b[0m');
+    lines.push(COLOR_BOLD + theme.primary + 'Serial Ports' + COLOR_RESET);
     if (portList.length > 0) {
       lines.push(`Found ${portList.length} port(s):`);
       // Calculate max friendlyName display width for alignment (considering Chinese chars)
       const maxNameWidth = Math.max(35, ...portList.slice(0, 8).map(p => displayWidth(p.friendlyName)));
       portList.slice(0, 8).forEach((port, i) => {
-        const mark = i === selectedPort ? '\x1b[36m❯\x1b[0m' : ' ';
+        const mark = i === selectedPort ? theme.primary + '❯' + COLOR_RESET : ' ';
         const paddedName = padDisplay(port.friendlyName, maxNameWidth);
-        const tags = port.tags.length > 0 ? `\x1b[32m[${port.tags.join(', ')}]\x1b[0m` : '\x1b[2m[未标记]\x1b[0m';
+        const tags = port.tags.length > 0 ? COLOR_GREEN + '[' + port.tags.join(', ') + ']' + COLOR_RESET : COLOR_DIM + '[未标记]' + COLOR_RESET;
         lines.push(` ${mark} ${i + 1}. ${paddedName} ${tags}`);
       });
       if (portList.length > 8) {
         lines.push(`   ... and ${portList.length - 8} more`);
       }
       lines.push('');
-      lines.push('\x1b[2m[↑/↓] navigate | [Enter] edit tag | [R] refresh | [Esc] back\x1b[0m');
+      lines.push(COLOR_DIM + '[↑/↓] navigate | [Enter] edit tag | [R] refresh | [Esc] back' + COLOR_RESET);
     } else {
-      lines.push('\x1b[2mNo serial ports found\x1b[0m');
-      lines.push('\x1b[2m[R] refresh | [Esc] back\x1b[0m');
+      lines.push(COLOR_DIM + 'No serial ports found' + COLOR_RESET);
+      lines.push(COLOR_DIM + '[R] refresh | [Esc] back' + COLOR_RESET);
     }
   } else if (currentView === 'port-tag') {
     // Port tag edit view
     const port = portList[selectedPort];
-    lines.push('\x1b[1m\x1b[36mEdit Port Tag\x1b[0m');
+    lines.push(COLOR_BOLD + theme.primary + 'Edit Port Tag' + COLOR_RESET);
     lines.push(`Port: ${port?.friendlyName || 'Unknown'}`);
     lines.push(`Tags: ${port?.tags.length > 0 ? port.tags.join(', ') : '(none)'}`);
     portTags.forEach((tag, i) => {
-      const mark = i === selectedTag ? '\x1b[36m❯\x1b[0m' : ' ';
+      const mark = i === selectedTag ? theme.primary + '❯' + COLOR_RESET : ' ';
       const hasTag = port?.tags.includes(tag);
-      const check = hasTag ? '\x1b[32m✓\x1b[0m' : ' ';
+      const check = hasTag ? COLOR_GREEN + '✓' + COLOR_RESET : ' ';
       lines.push(` ${mark} ${i + 1}. ${tag} ${check}`);
     });
     lines.push('');
-    lines.push('\x1b[2m[↑/↓] select tag | [Enter] add/remove | [D] clear all | [Esc] back\x1b[0m');
+    lines.push(COLOR_DIM + '[↑/↓] select tag | [Enter] add/remove | [D] clear all | [Esc] back' + COLOR_RESET);
   } else if (currentView === 'settings') {
-    lines.push('\x1b[1m\x1b[36mSettings\x1b[0m');
+    lines.push(COLOR_BOLD + theme.primary + 'Settings' + COLOR_RESET);
     settingsItems.forEach((item, i) => {
-      const mark = i === selectedSetting ? '\x1b[36m❯\x1b[0m' : ' ';
+      const mark = i === selectedSetting ? theme.primary + '❯' + COLOR_RESET : ' ';
       let valueStr: string;
       if (item.type === 'ports') {
         // Show port count
-        valueStr = `\x1b[2m(${portList.length} ports)\x1b[0m`;
+        valueStr = COLOR_DIM + '(' + portList.length + ' ports)' + COLOR_RESET;
       } else if (item.type === 'array') {
         const value = getConfigValue(config, item.key, item.type);
-        valueStr = `\x1b[2m(${value} items)\x1b[0m`;
+        valueStr = COLOR_DIM + '(' + value + ' items)' + COLOR_RESET;
+      } else if (item.type === 'theme') {
+        // Show current theme color
+        const currentTheme = config.theme?.color || 'cyan';
+        const themeColorCode = themeColorMap[currentTheme]?.primary || themeColorMap.cyan.primary;
+        valueStr = themeColorCode + currentTheme + COLOR_RESET;
       } else {
         const value = getConfigValue(config, item.key, item.type);
-        valueStr = value ? `\x1b[2m${truncate(value, 30)}\x1b[0m` : '\x1b[2m(not set)\x1b[0m';
+        valueStr = value ? COLOR_DIM + truncate(value, 30) + COLOR_RESET : COLOR_DIM + '(not set)' + COLOR_RESET;
       }
       lines.push(` ${mark} ${i + 1}. ${item.label}: ${valueStr}`);
     });
     lines.push('');
-    lines.push('\x1b[2m[↑/↓] navigate | [1-4] select | [Enter] edit | [Esc] back\x1b[0m');
+    lines.push(COLOR_DIM + '[↑/↓] navigate | [1-5] select | [Enter] edit | [Esc] back' + COLOR_RESET);
+  } else if (currentView === 'theme-select') {
+    lines.push(COLOR_BOLD + theme.primary + 'Select Theme Color' + COLOR_RESET);
+    lines.push('');
+    const currentTheme = (config as any).theme?.color || 'cyan';
+    themeColorNames.forEach((colorName: string, i: number) => {
+      const mark = i === selectedThemeColor ? theme.primary + '❯' + COLOR_RESET : ' ';
+      const isSelected = colorName === currentTheme;
+      const colorCode = themeColorMap[colorName]?.primary || '';
+      const check = isSelected ? COLOR_GREEN + ' ✓' + COLOR_RESET : '';
+      lines.push(` ${mark} ${i + 1}. ${colorCode}${colorName}${COLOR_RESET}${check}`);
+    });
+    lines.push('');
+    lines.push(COLOR_DIM + '[↑/↓] navigate | [Enter] select | [Esc] back' + COLOR_RESET);
   } else if (currentView === 'settings-detail') {
-    lines.push('\x1b[1m\x1b[36mSetting Detail\x1b[0m');
+    lines.push(COLOR_BOLD + theme.primary + 'Setting Detail' + COLOR_RESET);
     if (outputBuffer.length > 0) {
       outputBuffer.slice(-10).forEach(line => {
         lines.push(line);
       });
     }
     lines.push('');
-    lines.push('\x1b[2m[Enter/Esc] back\x1b[0m');
+    lines.push(COLOR_DIM + '[Enter/Esc] back' + COLOR_RESET);
   } else if (currentView === 'settings-edit') {
     const item = settingsItems.find(s => s.key === editingSettingKey);
-    lines.push('\x1b[1m\x1b[36mEdit: ' + (item?.label || 'Value') + '\x1b[0m');
-    lines.push('\x1b[2mCurrent: ' + (config[editingSettingKey] || '(not set)') + '\x1b[0m');
-    lines.push('New value: ' + editInputBuffer + '\x1b[5m_\x1b[0m');
+    lines.push(COLOR_BOLD + theme.primary + 'Edit: ' + (item?.label || 'Value') + COLOR_RESET);
+    lines.push(COLOR_DIM + 'Current: ' + (config[editingSettingKey] || '(not set)') + COLOR_RESET);
+    lines.push('New value: ' + editInputBuffer + '\x1b[5m_' + COLOR_RESET);
     lines.push('');
-    lines.push('\x1b[2m[Enter] save | [Esc] cancel\x1b[0m');
+    lines.push(COLOR_DIM + '[Enter] save | [Esc] cancel' + COLOR_RESET);
   }
 
   // Status bar with box lines
   lines.push('');
-  lines.push('\x1b[36m' + '─'.repeat(termWidth) + '\x1b[0m');
-  lines.push(`\x1b[2mWorkspace: ${workspaceName}\x1b[0m`);
+  lines.push(theme.primary + '─'.repeat(termWidth) + COLOR_RESET);
+  lines.push(COLOR_DIM + 'Workspace: ' + workspaceName + COLOR_RESET);
 
-  // Output
+  // Output - incrementally update each line
   lines.forEach((line, idx) => {
-    process.stdout.write(`\x1b[${idx + 1}H${line}`);
+    process.stdout.write(`\x1b[${idx + 1}H\x1b[2K${line}`);
   });
+
+  // Clear extra lines from previous view (if new view is shorter)
+  if (!fullClear && prevViewLines > lines.length) {
+    for (let i = lines.length + 1; i <= prevViewLines; i++) {
+      process.stdout.write(`\x1b[${i}H\x1b[2K`);
+    }
+  }
+
+  // Update previous view line count
+  prevViewLines = lines.length;
 }
 
 export async function startTUI(): Promise<void> {
@@ -615,7 +816,7 @@ export async function startTUI(): Promise<void> {
       if (input === '\x03' || input === '\x1b' || (input === 'q' && currentView === 'main')) {
         if (input === '\x1b' && currentView !== 'main') {
           // Ports and port-tag views return to settings
-          if (currentView === 'ports' || currentView === 'port-tag' || currentView === 'settings-edit') {
+          if (currentView === 'ports' || currentView === 'port-tag' || currentView === 'settings-edit' || currentView === 'theme-select') {
             currentView = 'settings';
             editInputBuffer = '';
             editingSettingKey = '';
@@ -638,11 +839,13 @@ export async function startTUI(): Promise<void> {
       // Navigation
       if (currentView === 'main') {
         if (input === '\x1b[A') { // Up
+          const oldIndex = selectedMenu;
           selectedMenu = Math.max(0, selectedMenu - 1);
-          renderScreen();
+          if (oldIndex !== selectedMenu) updateListSelection('main', oldIndex, selectedMenu);
         } else if (input === '\x1b[B') { // Down
+          const oldIndex = selectedMenu;
           selectedMenu = Math.min(menuItems.length - 1, selectedMenu + 1);
-          renderScreen();
+          if (oldIndex !== selectedMenu) updateListSelection('main', oldIndex, selectedMenu);
         } else if (input === '\r' || input === '\n') { // Enter
           const item = menuItems[selectedMenu];
           if (item.action === 'quit') {
@@ -662,8 +865,10 @@ export async function startTUI(): Promise<void> {
         } else if (input >= '1' && input <= '4') {
           // Number keys for menu selection
           const idx = parseInt(input) - 1;
-          if (idx >= 0 && idx < menuItems.length) {
+          if (idx >= 0 && idx < menuItems.length && idx !== selectedMenu) {
+            const oldIndex = selectedMenu;
             selectedMenu = idx;
+            updateListSelection('main', oldIndex, selectedMenu);
             const item = menuItems[idx];
             if (item.action === 'quit') {
               process.stdout.write('\x1b[?25h\x1b[2J\x1b[H');
@@ -694,17 +899,20 @@ export async function startTUI(): Promise<void> {
             await loadFirmwareList();
             renderScreen();
           } else if (input === '\x1b[A') { // Up
+            const oldIndex = selectedFirmware;
             selectedFirmware = Math.max(0, selectedFirmware - 1);
-            renderScreen();
+            if (oldIndex !== selectedFirmware) updateListSelection('flash', oldIndex, selectedFirmware);
           } else if (input === '\x1b[B') { // Down
+            const oldIndex = selectedFirmware;
             selectedFirmware = Math.min(Math.min(8, firmwareList.length) - 1, selectedFirmware + 1);
-            renderScreen();
+            if (oldIndex !== selectedFirmware) updateListSelection('flash', oldIndex, selectedFirmware);
           } else if (input >= '1' && input <= '8') {
             // Number keys to select firmware
             const idx = parseInt(input) - 1;
-            if (idx >= 0 && idx < Math.min(8, firmwareList.length)) {
+            if (idx >= 0 && idx < Math.min(8, firmwareList.length) && idx !== selectedFirmware) {
+              const oldIndex = selectedFirmware;
               selectedFirmware = idx;
-              renderScreen();
+              updateListSelection('flash', oldIndex, selectedFirmware);
             }
           } else if (input === '\r' || input === '\n') {
             // Enter to flash selected firmware
@@ -730,17 +938,20 @@ export async function startTUI(): Promise<void> {
         // Build view - command selection
         if (!isExecuting) {
           if (input === '\x1b[A') { // Up
+            const oldIndex = selectedBuild;
             selectedBuild = Math.max(0, selectedBuild - 1);
-            renderScreen();
+            if (oldIndex !== selectedBuild) updateListSelection('build', oldIndex, selectedBuild);
           } else if (input === '\x1b[B') { // Down
+            const oldIndex = selectedBuild;
             selectedBuild = Math.min(Math.min(8, buildCommands.length) - 1, selectedBuild + 1);
-            renderScreen();
+            if (oldIndex !== selectedBuild) updateListSelection('build', oldIndex, selectedBuild);
           } else if (input >= '1' && input <= '8') {
             // Number keys to select command
             const idx = parseInt(input) - 1;
-            if (idx >= 0 && idx < Math.min(8, buildCommands.length)) {
+            if (idx >= 0 && idx < Math.min(8, buildCommands.length) && idx !== selectedBuild) {
+              const oldIndex = selectedBuild;
               selectedBuild = idx;
-              renderScreen();
+              updateListSelection('build', oldIndex, selectedBuild);
             }
           } else if (input === '\r' || input === '\n') {
             // Enter to execute selected command
@@ -766,16 +977,19 @@ export async function startTUI(): Promise<void> {
             await loadPortList();
             renderScreen();
           } else if (input === '\x1b[A') { // Up
+            const oldIndex = selectedPort;
             selectedPort = Math.max(0, selectedPort - 1);
-            renderScreen();
+            if (oldIndex !== selectedPort) updateListSelection('ports', oldIndex, selectedPort);
           } else if (input === '\x1b[B') { // Down
+            const oldIndex = selectedPort;
             selectedPort = Math.min(Math.min(8, portList.length) - 1, selectedPort + 1);
-            renderScreen();
+            if (oldIndex !== selectedPort) updateListSelection('ports', oldIndex, selectedPort);
           } else if (input >= '1' && input <= '8') {
             const idx = parseInt(input) - 1;
-            if (idx >= 0 && idx < Math.min(8, portList.length)) {
+            if (idx >= 0 && idx < Math.min(8, portList.length) && idx !== selectedPort) {
+              const oldIndex = selectedPort;
               selectedPort = idx;
-              renderScreen();
+              updateListSelection('ports', oldIndex, selectedPort);
             }
           } else if (input === '\r' || input === '\n') {
             // Enter to edit port tags
@@ -790,16 +1004,19 @@ export async function startTUI(): Promise<void> {
         // Port tag edit view
         const port = portList[selectedPort];
         if (input === '\x1b[A') { // Up
+          const oldIndex = selectedTag;
           selectedTag = Math.max(0, selectedTag - 1);
-          renderScreen();
+          if (oldIndex !== selectedTag) updateListSelection('port-tag', oldIndex, selectedTag);
         } else if (input === '\x1b[B') { // Down
+          const oldIndex = selectedTag;
           selectedTag = Math.min(portTags.length - 1, selectedTag + 1);
-          renderScreen();
+          if (oldIndex !== selectedTag) updateListSelection('port-tag', oldIndex, selectedTag);
         } else if (input >= '1' && input <= '3') {
           const idx = parseInt(input) - 1;
-          if (idx >= 0 && idx < portTags.length) {
+          if (idx >= 0 && idx < portTags.length && idx !== selectedTag) {
+            const oldIndex = selectedTag;
             selectedTag = idx;
-            renderScreen();
+            updateListSelection('port-tag', oldIndex, selectedTag);
           }
         } else if (input === '\r' || input === '\n') {
           // Add or remove selected tag
@@ -827,17 +1044,20 @@ export async function startTUI(): Promise<void> {
       } else if (currentView === 'settings') {
         // Settings view - navigation
         if (input === '\x1b[A') { // Up
+          const oldIndex = selectedSetting;
           selectedSetting = Math.max(0, selectedSetting - 1);
-          renderScreen();
+          if (oldIndex !== selectedSetting) updateListSelection('settings', oldIndex, selectedSetting);
         } else if (input === '\x1b[B') { // Down
+          const oldIndex = selectedSetting;
           selectedSetting = Math.min(settingsItems.length - 1, selectedSetting + 1);
-          renderScreen();
-        } else if (input >= '1' && input <= '4') {
+          if (oldIndex !== selectedSetting) updateListSelection('settings', oldIndex, selectedSetting);
+        } else if (input >= '1' && input <= '5') {
           // Number keys to select setting
           const idx = parseInt(input) - 1;
-          if (idx >= 0 && idx < settingsItems.length) {
+          if (idx >= 0 && idx < settingsItems.length && idx !== selectedSetting) {
+            const oldIndex = selectedSetting;
             selectedSetting = idx;
-            renderScreen();
+            updateListSelection('settings', oldIndex, selectedSetting);
           }
         } else if (input === '\r' || input === '\n') {
           // Enter to show/edit setting
@@ -846,6 +1066,14 @@ export async function startTUI(): Promise<void> {
             // Enter Ports configuration view
             await loadPortList();
             currentView = 'ports';
+            renderScreen();
+          } else if (item.type === 'theme') {
+            // Enter theme color selection
+            const config = loadConfig() as any || {};
+            const currentTheme = config.theme?.color || 'cyan';
+            selectedThemeColor = themeColorNames.indexOf(currentTheme);
+            if (selectedThemeColor < 0) selectedThemeColor = 0;
+            currentView = 'theme-select';
             renderScreen();
           } else if (item.type === 'path') {
             // Enter edit mode for path settings
@@ -861,23 +1089,49 @@ export async function startTUI(): Promise<void> {
             outputBuffer = [];
             if (item.type === 'array') {
               const arr = value || [];
-              outputBuffer.push(`\x1b[1m${item.label} (${arr.length} items):\x1b[0m`);
+              outputBuffer.push(COLOR_BOLD + item.label + ' (' + arr.length + ' items):' + COLOR_RESET);
               arr.forEach((elem: any, i: number) => {
                 const str = typeof elem === 'object' ? JSON.stringify(elem) : String(elem);
                 outputBuffer.push(`  ${i + 1}. ${truncate(str, 40)}`);
               });
               if (arr.length === 0) {
-                outputBuffer.push('  \x1b[2m(empty)\x1b[0m');
+                outputBuffer.push('  ' + COLOR_DIM + '(empty)' + COLOR_RESET);
               }
             } else {
-              outputBuffer.push(`\x1b[1m${item.label}:\x1b[0m`);
-              outputBuffer.push(`  ${value || '\x1b[2m(not set)\x1b[0m'}`);
+              outputBuffer.push(COLOR_BOLD + item.label + ':' + COLOR_RESET);
+              outputBuffer.push(`  ${value || COLOR_DIM + '(not set)' + COLOR_RESET}`);
             }
             outputBuffer.push('');
-            outputBuffer.push('\x1b[2mEdit in dove.json file\x1b[0m');
+            outputBuffer.push(COLOR_DIM + 'Edit in dove.json file' + COLOR_RESET);
             currentView = 'settings-detail';
             renderScreen();
           }
+        }
+      } else if (currentView === 'theme-select') {
+        // Theme color selection
+        if (input === '\x1b[A') { // Up
+          const oldIndex = selectedThemeColor;
+          selectedThemeColor = Math.max(0, selectedThemeColor - 1);
+          if (oldIndex !== selectedThemeColor) updateListSelection('theme', oldIndex, selectedThemeColor);
+        } else if (input === '\x1b[B') { // Down
+          const oldIndex = selectedThemeColor;
+          selectedThemeColor = Math.min(themeColorNames.length - 1, selectedThemeColor + 1);
+          if (oldIndex !== selectedThemeColor) updateListSelection('theme', oldIndex, selectedThemeColor);
+        } else if (input >= '1' && input <= '7') {
+          // Number keys to select theme
+          const idx = parseInt(input) - 1;
+          if (idx >= 0 && idx < themeColorNames.length && idx !== selectedThemeColor) {
+            const oldIndex = selectedThemeColor;
+            selectedThemeColor = idx;
+            updateListSelection('theme', oldIndex, selectedThemeColor);
+          }
+        } else if (input === '\r' || input === '\n') {
+          // Enter to select theme
+          const config = loadConfig() as any || {};
+          config.theme = { color: themeColorNames[selectedThemeColor] };
+          saveConfig(config);
+          currentView = 'settings';
+          renderScreen();
         }
       } else if (currentView === 'settings-detail') {
         // Settings detail view - just show info, press any key to go back

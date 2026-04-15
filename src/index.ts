@@ -4,8 +4,25 @@ import { flashFirmware, listDevices } from './flash';
 import { listFirmware } from './list';
 import { compileFirmware, listBuildCommands, setConfig, showConfig } from './compile';
 import { loadToolsConfig, loadConfig } from './utils';
-import { showSerialList, openAndMonitorPort, sendATCommandCLI, findATPort } from './serial';
-import type { MonitorOptions, CLIConfig } from './types';
+import { showSerialList, openAndMonitorPort, sendATCommandCLI } from './serial';
+import type { MonitorOptions, CLIConfig, ComPortConfig, PortTag } from './types';
+
+/**
+ * Get tag from port config (compatible with both new and legacy format)
+ * New format: { port, tag: "AT" }
+ * Legacy format: { port, tags: ["AT"], isActive }
+ */
+function getPortTag(portConfig: ComPortConfig): PortTag | null {
+  // New format: single tag
+  if (portConfig.tag) {
+    return portConfig.tag;
+  }
+  // Legacy format: tags array (use first tag)
+  if (portConfig.tags && portConfig.tags.length > 0) {
+    return portConfig.tags[0] as PortTag;
+  }
+  return null;
+}
 
 // TUI is optional - dynamic import to avoid bundling issues
 async function startTUI(): Promise<void> {
@@ -60,30 +77,24 @@ Commands:
     --skip-dl-mode, -s  Skip auto entering download mode
     --progress <mode>   Progress display mode (simple/detailed)
   port <subcommand>      Port operations
-    list [options]      List ports (JSON output)
-      --usb             List USB devices only
-      --serial          List serial ports only
-      --all             List both USB and serial ports
-    monitor [options]   Monitor serial port
-      -p, --port <port>   Serial port (e.g., COM9)
-      --tag <tag>         Select port by tag (uses comPorts config)
+    list                List serial ports (JSON output)
+    monitor [options]   Monitor serial port (output to file recommended)
+      --tag <tag>         Select port by tag (default: DBG)
+      -p, --port <port>   Specify port manually
       -b, --baud <rate>   Set baud rate (default 115200)
-      -t, --timeout <ms>  Set timeout in milliseconds (default 0 = no timeout)
-      -o, --output <file> Output to file
+      -t, --timeout <ms>  Timeout in ms (required, minimum 5000)
+      -o, --output <file> Output to file (recommended)
       -a, --append        Append to file (default overwrite)
       --include <keywords> Include keywords (comma separated)
       --exclude <keywords> Exclude keywords (comma separated)
       --until <text>      Exit after receiving this content
-      --until-regex <pattern> Exit after regex match
       --lines <n>         Capture n lines then exit
-      --json              Output results in JSON format
+      --json              Output summary in JSON format
       --timestamp         Add timestamp to each line
-    at [options]        Send AT command (JSON output)
+    at [options]        Send AT command (JSON output, auto-select AT port)
       -c, --command <cmd> AT command to send (required)
-      -p, --port <port>   Serial port (auto-detect if not specified)
-      --tag <tag>         Select port by tag (uses comPorts config)
+      --tag <tag>         Select port by tag (default: AT)
       -t, --timeout <ms>  Set timeout (default 5000)
-      --platform <type>   Platform for auto-detect (default asr160x)
   config                Show current configuration (JSON output)
   config set <key> <value>  Set configuration item (JSON output)
   help                  Show help information
@@ -93,12 +104,9 @@ Examples:
   dove.exe build --list       # List all build commands (JSON)
   dove.exe flash              # Flash firmware (auto-find)
   dove.exe flash --list       # List available firmware (JSON)
-  dove.exe port list          # List all ports (JSON)
-  dove.exe port list --serial # List serial ports only (JSON)
-  dove.exe port monitor -p COM9
-  dove.exe port monitor --tag Log --timeout 30000
-  dove.exe port at -c "ATI"
-  dove.exe port at -c "AT+CGMI" --json
+  dove.exe port list          # List ports with tags (JSON)
+  dove.exe port monitor --timeout 30000 -o log.txt  # Auto use DBG port
+  dove.exe port at -c "ATI"   # Auto use AT port
   dove.exe config             # Show config (JSON)
 
 Configuration file:
@@ -124,8 +132,11 @@ function parseMonitorArgs(args: string[]): { portPath: string; options: Partial<
 
   const getAvailableTags = (config: CLIConfig): string => {
     if (!config.comPorts || config.comPorts.length === 0) return 'none';
-    const allTags = config.comPorts.flatMap(p => p.tags);
-    return [...new Set(allTags)].join(', ');
+    // Filter out invalid ports, only show valid tags
+    const validTags = config.comPorts
+      .map(p => getPortTag(p))
+      .filter(t => t && t !== 'invalid');
+    return [...new Set(validTags)].join(', ');
   };
 
   let portPath = getArgValue('-p', '--port');
@@ -135,10 +146,15 @@ function parseMonitorArgs(args: string[]): { portPath: string; options: Partial<
   if (!portPath) {
     const config = loadConfig() as CLIConfig;
 
+    // Priority 1: User specified tag
     if (tag) {
       if (config.comPorts && config.comPorts.length > 0) {
-        const portConfig = config.comPorts.find(p => p.tags.includes(tag));
+        const portConfig = config.comPorts.find(p => getPortTag(p) === tag);
         if (portConfig) {
+          const portTag = getPortTag(portConfig);
+          if (portTag === 'invalid') {
+            throw new Error(`Port '${portConfig.port}' is marked as invalid and cannot be used`);
+          }
           portPath = portConfig.port;
           portSource = 'config_tag';
         } else {
@@ -149,27 +165,33 @@ function parseMonitorArgs(args: string[]): { portPath: string; options: Partial<
       }
     }
 
-    if (!portPath && config.defaultComPort) {
-      portPath = config.defaultComPort;
-      portSource = 'config_default';
-    }
-
+    // Priority 2: Use "DBG" tag port as default for monitoring
     if (!portPath && config.comPorts && config.comPorts.length > 0) {
-      const activePort = config.comPorts.find(p => p.isActive);
-      if (activePort) {
-        portPath = activePort.port;
-        portSource = 'config_active';
+      const dbgPort = config.comPorts.find(p => getPortTag(p) === 'DBG');
+      if (dbgPort) {
+        portPath = dbgPort.port;
+        portSource = 'config_default_tag';
       }
     }
   }
 
   if (!portPath) {
-    throw new Error('Please specify serial port with -p (e.g., -p COM9), or use --tag to select by tag, or configure defaultComPort in dove.json');
+    throw new Error('Please specify serial port with -p or --tag, or configure a port with "DBG" tag in dove.json');
+  }
+
+  const timeoutValue = parseInt(getArgValue('-t', '--timeout') || '') || 0;
+
+  // Timeout constraint: minimum 5000ms required
+  if (timeoutValue === 0) {
+    throw new Error('Timeout is required. Use --timeout <ms> (minimum 5000, e.g., --timeout 30000)');
+  }
+  if (timeoutValue < 5000) {
+    throw new Error(`Timeout must be at least 5000ms. Current value: ${timeoutValue}ms`);
   }
 
   const monitorOptions: Partial<MonitorOptions> = {
     baudRate: parseInt(getArgValue('-b', '--baud') || '') || 115200,
-    timeout: parseInt(getArgValue('-t', '--timeout') || '') || 0,
+    timeout: timeoutValue,
     output: getArgValue('-o', '--output') || undefined,
     append: hasFlag('-a', '--append'),
     include: getArgValue(null, '--include') || undefined,
@@ -201,7 +223,6 @@ function parseATArgs(args: string[]): {
   portPath: string | null;
   command: string;
   timeout: number;
-  platform: string;
   tag?: string;
 } {
   const getArgValue = (short: string | null, long: string): string | null => {
@@ -220,7 +241,6 @@ function parseATArgs(args: string[]): {
     portPath: getArgValue('-p', '--port'),
     command,
     timeout: parseInt(getArgValue('-t', '--timeout') || '') || 5000,
-    platform: getArgValue(null, '--platform') || 'asr160x',
     tag: tag || undefined
   };
 }
@@ -264,45 +284,46 @@ async function handlePortMonitor(args: string[]): Promise<number> {
  * Handle port at command (JSON output)
  */
 async function handlePortAt(args: string[]): Promise<number> {
-  const { portPath, command, timeout, platform, tag } = parseATArgs(args);
+  const { portPath, command, timeout, tag } = parseATArgs(args);
 
   let actualPortPath = portPath;
 
   if (!actualPortPath) {
     const config = loadConfig() as CLIConfig;
 
+    // Priority 1: User specified tag
     if (tag) {
       if (config.comPorts && config.comPorts.length > 0) {
-        const portConfig = config.comPorts.find(p => p.tags.includes(tag));
+        const portConfig = config.comPorts.find(p => getPortTag(p) === tag);
         if (portConfig) {
+          const portTag = getPortTag(portConfig);
+          if (portTag === 'invalid') {
+            throw new Error(`Port '${portConfig.port}' is marked as invalid and cannot be used`);
+          }
           actualPortPath = portConfig.port;
         } else {
-          const allTags = config.comPorts.flatMap(p => p.tags);
-          const uniqueTags = [...new Set(allTags)];
-          throw new Error(`No port found with tag '${tag}'. Available tags: ${uniqueTags.join(', ')}`);
+          const validTags = config.comPorts
+            .map(p => getPortTag(p))
+            .filter(t => t && t !== 'invalid');
+          throw new Error(`No port found with tag '${tag}'. Available tags: ${validTags.join(', ')}`);
         }
       } else {
         throw new Error('No comPorts configured in dove.json. Please configure ports with tags first.');
       }
     }
 
-    if (!actualPortPath) {
-      const atPort = await findATPort(platform);
-      if (atPort) actualPortPath = atPort.path;
-    }
-
-    if (!actualPortPath && config.defaultComPort) {
-      actualPortPath = config.defaultComPort;
-    }
-
+    // Priority 2: Default use "AT" tag port
     if (!actualPortPath && config.comPorts && config.comPorts.length > 0) {
-      const activePort = config.comPorts.find(p => p.isActive);
-      if (activePort) actualPortPath = activePort.port;
+      const atPort = config.comPorts.find(p => getPortTag(p) === 'AT');
+      if (atPort) {
+        actualPortPath = atPort.port;
+      }
     }
-  }
 
-  if (!actualPortPath) {
-    throw new Error('Please specify serial port with -p (e.g., -p COM9), or use --tag to select by tag, or use --platform to auto-detect AT port');
+    // Priority 3: Error with clear guidance
+    if (!actualPortPath) {
+      throw new Error('AT port not found. Please configure a port with "AT" tag in dove.json.');
+    }
   }
 
   const result = await sendATCommandCLI(actualPortPath, command, timeout);

@@ -149,13 +149,21 @@ export interface BuildCommandItem {
 }
 
 /**
- * COM port configuration with tags
+ * Port tag types for AI recognition
+ */
+export type PortTag = 'AT' | 'DBG' | 'invalid';
+
+/**
+ * COM port configuration (supports both new and legacy format)
+ * New format: { port, tag }
+ * Legacy format (VS Code extension): { port, tags: [], isActive }
  */
 export interface ComPortConfig {
   port: string;
-  tags: string[];
+  tag?: PortTag;           // New format: single tag
+  tags?: PortTag[];        // Legacy format: array of tags
+  isActive?: boolean;      // Legacy format: active flag
   description?: string;
-  isActive?: boolean;
 }
 
 /**
@@ -165,9 +173,16 @@ export interface CLIConfig {
   firmwarePath?: string;
   buildCommands?: BuildCommandItem[];
   buildGitBashPath?: string;
-  defaultComPort?: string;
   comPorts?: ComPortConfig[];
   workspacePath?: string;
+  theme?: ThemeConfig;
+}
+
+/**
+ * Theme configuration
+ */
+export interface ThemeConfig {
+  color?: 'cyan' | 'blue' | 'green' | 'magenta' | 'yellow' | 'red' | 'white';
 }
 
 /**
@@ -206,8 +221,7 @@ export interface SerialPortInfo {
   manufacturer: string;
   friendlyName: string;
   fullDescription: string;
-  tags?: string[];  // User-defined tags from dove.json
-  isActive?: boolean;  // Is this port active in config
+  tag?: PortTag | null;  // User-defined tag from dove.json
 }
 
 /**
