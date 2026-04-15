@@ -6,7 +6,7 @@ import fs from 'fs';
 import { spawn } from 'child_process';
 import readline from 'readline';
 import iconvLite from 'iconv-lite';
-import { findWorkspacePath, loadConfig, saveConfig, getToolPath, buildToolArgs, getGlobalSettings, loadToolsConfig, isWindows, determineFirmwareType, killProcessTree } from '../utils';
+import { findWorkspacePath, loadConfig, saveConfig, getToolPath, buildToolArgs, getGlobalSettings, loadToolsConfig, isWindows, determineFirmwareType, killProcessTree, findConfigPath } from '../utils';
 import { compileFirmware } from '../compile';
 import { findAllFirmwares, formatSize } from '../utils';
 import { listSerialPorts, enterDownloadMode, findDownloadPort } from '../serial';
@@ -42,10 +42,15 @@ function renderListItem(type: ListType, index: number, isSelected: boolean): str
       return `${mainPrefix}${mainColor}${index + 1}. ${menuItems[index].label}${COLOR_RESET}`;
 
     case 'build':
-      if (buildCommands.length === 0) return '';
-      const cmd = buildCommands[index];
-      const activeBuild = cmd.isActive ? COLOR_GREEN + ' *' + COLOR_RESET : '';
-      return ` ${mark} ${index + 1}. ${cmd.name}: ${cmd.command}${activeBuild}`;
+      if (index < buildCommands.length && index < 7) {
+        const cmd = buildCommands[index];
+        const activeBuild = cmd.isActive ? COLOR_GREEN + ' *' + COLOR_RESET : '';
+        return ` ${mark} ${index + 1}. ${cmd.name}: ${cmd.command}${activeBuild}`;
+      } else if (index === Math.min(7, buildCommands.length)) {
+        // Add option
+        return ` ${mark} ${index + 1}. ${COLOR_GREEN}+ Add Command${COLOR_RESET}`;
+      }
+      return '';
 
     case 'flash':
       if (firmwareList.length === 0) return '';
@@ -80,6 +85,8 @@ function renderListItem(type: ListType, index: number, isSelected: boolean): str
         const currentTheme = config.theme?.color || 'cyan';
         const themeColorCode = themeColorMap[currentTheme]?.primary || themeColorMap.cyan.primary;
         valueStr = themeColorCode + currentTheme + COLOR_RESET;
+      } else if (settingItem.type === 'action') {
+        valueStr = COLOR_DIM + 'dove.json' + COLOR_RESET;
       } else {
         const value = getConfigValue(config, settingItem.key, settingItem.type);
         valueStr = value ? COLOR_DIM + truncate(value, 30) + COLOR_RESET : COLOR_DIM + '(not set)' + COLOR_RESET;
@@ -105,7 +112,7 @@ function updateListSelection(type: ListType, oldIndex: number, newIndex: number)
   // Get list length for bounds check
   const listLengths: Record<ListType, number> = {
     'main': menuItems.length,
-    'build': Math.min(8, buildCommands.length),
+    'build': Math.min(7, buildCommands.length) + 1, // +1 for Add option
     'flash': Math.min(8, firmwareList.length),
     'ports': Math.min(8, portList.length),
     'port-tag': portTags.length,
@@ -159,7 +166,7 @@ const COLOR_RED = '\x1b[31m';
 const COLOR_YELLOW = '\x1b[33m';
 
 // State variables
-let currentView = 'main';
+let currentView: 'main' | 'build' | 'build-add' | 'flash' | 'ports' | 'port-tag' | 'settings' | 'settings-detail' | 'settings-edit' | 'theme-select' = 'main';
 let selectedMenu = 0;
 let outputBuffer: string[] = [];
 let isExecuting = false;
@@ -183,7 +190,7 @@ let spinnerIndex = 0;
 const spinnerChars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
 // Menu items
-const menuItems = [
+const menuItems: { label: string; action: 'build' | 'flash' | 'settings' | 'quit' }[] = [
   { label: 'Build', action: 'build' },
   { label: 'Flash', action: 'flash' },
   { label: 'Settings', action: 'settings' },
@@ -194,13 +201,13 @@ const menuItems = [
 const portTags = ['AT', 'DBG', 'Invalid'];
 let selectedTag = 0;
 
-// Settings items (COM Ports replaced by Ports view)
+// Settings items
 const settingsItems = [
   { key: 'workspacePath', label: 'Workspace Path', type: 'path' },
   { key: 'firmwarePath', label: 'Firmware Path', type: 'path' },
   { key: 'theme', label: 'Theme Color', type: 'theme' },
-  { key: 'buildCommands', label: 'Build Commands', type: 'array' },
-  { key: 'ports', label: 'Ports', type: 'ports' },  // Entry to Ports config
+  { key: 'ports', label: 'Ports', type: 'ports' },
+  { key: 'openConfig', label: 'Open Config File', type: 'action' },
 ];
 let selectedSetting = 0;
 
@@ -211,6 +218,12 @@ let selectedThemeColor = 0;
 // Settings edit state
 let editingSettingKey = '';
 let editInputBuffer = '';
+
+// Build add command state
+let buildAddStep = 0; // 0: name, 1: command, 2: description
+let buildAddName = '';
+let buildAddCommand = '';
+let buildAddDescription = '';
 
 // Load firmware list
 async function loadFirmwareList(): Promise<void> {
@@ -625,22 +638,38 @@ function renderScreen(fullClear: boolean = false): void {
     if (isExecuting) {
       lines.push(COLOR_YELLOW + '⏳ Building...' + COLOR_RESET);
       lines.push(COLOR_DIM + 'Please wait...' + COLOR_RESET);
-    } else if (buildCommands.length > 0) {
+    } else {
       lines.push(`Found ${buildCommands.length} build command(s):`);
-      buildCommands.slice(0, 8).forEach((cmd, i) => {
+      buildCommands.slice(0, 7).forEach((cmd, i) => {
         const mark = i === selectedBuild ? theme.primary + '❯' + COLOR_RESET : ' ';
         const active = cmd.isActive ? COLOR_GREEN + ' *' + COLOR_RESET : '';
         lines.push(` ${mark} ${i + 1}. ${cmd.name}: ${cmd.command}${active}`);
       });
-      if (buildCommands.length > 8) {
-        lines.push(`   ... and ${buildCommands.length - 8} more`);
+      if (buildCommands.length > 7) {
+        lines.push(`   ... and ${buildCommands.length - 7} more`);
       }
+      // Add "Add Command" option as last item
+      const addIndex = Math.min(7, buildCommands.length);
+      const addMark = selectedBuild === addIndex ? theme.primary + '❯' + COLOR_RESET : ' ';
+      lines.push(` ${addMark} ${addIndex + 1}. ${COLOR_GREEN}+ Add Command${COLOR_RESET}`);
       lines.push('');
-      lines.push(COLOR_DIM + '[↑/↓] navigate | [1-8] select | [Enter] build | [Esc] back' + COLOR_RESET);
-    } else {
-      lines.push(COLOR_DIM + 'No build commands configured' + COLOR_RESET);
-      lines.push(COLOR_DIM + 'Add commands in dove.json | [Esc] back' + COLOR_RESET);
+      lines.push(COLOR_DIM + '[↑/↓] navigate | [1-8] select | [Enter] build/add | [D] delete | [Esc] back' + COLOR_RESET);
     }
+  } else if (currentView === 'build-add') {
+    // Add command view
+    lines.push(COLOR_BOLD + theme.primary + 'Build Commands' + COLOR_RESET);
+    lines.push(COLOR_DIM + 'Add New Build Command' + COLOR_RESET);
+    lines.push('');
+    const steps = ['Name', 'Command', 'Description (for AI context)'];
+    const values = [buildAddName, buildAddCommand, buildAddDescription];
+    steps.forEach((step, i) => {
+      const isActive = i === buildAddStep;
+      const mark = isActive ? theme.primary + '❯' + COLOR_RESET : ' ';
+      const value = values[i] || '';
+      lines.push(` ${mark} ${i + 1}. ${step}: ${value}${isActive ? '\x1b[5m_' + COLOR_RESET : ''}`);
+    });
+    lines.push('');
+    lines.push(COLOR_DIM + '[↑/↓] switch field | [Enter] save | [Esc] cancel' + COLOR_RESET);
   } else if (currentView === 'flash') {
     lines.push(COLOR_BOLD + theme.primary + 'Flash Firmware' + COLOR_RESET);
     if (isExecuting) {
@@ -727,16 +756,16 @@ function renderScreen(fullClear: boolean = false): void {
       const mark = i === selectedSetting ? theme.primary + '❯' + COLOR_RESET : ' ';
       let valueStr: string;
       if (item.type === 'ports') {
-        // Show port count
         valueStr = COLOR_DIM + '(' + portList.length + ' ports)' + COLOR_RESET;
       } else if (item.type === 'array') {
         const value = getConfigValue(config, item.key, item.type);
         valueStr = COLOR_DIM + '(' + value + ' items)' + COLOR_RESET;
       } else if (item.type === 'theme') {
-        // Show current theme color
         const currentTheme = config.theme?.color || 'cyan';
         const themeColorCode = themeColorMap[currentTheme]?.primary || themeColorMap.cyan.primary;
         valueStr = themeColorCode + currentTheme + COLOR_RESET;
+      } else if (item.type === 'action') {
+        valueStr = COLOR_DIM + 'dove.json' + COLOR_RESET;
       } else {
         const value = getConfigValue(config, item.key, item.type);
         valueStr = value ? COLOR_DIM + truncate(value, 30) + COLOR_RESET : COLOR_DIM + '(not set)' + COLOR_RESET;
@@ -937,25 +966,36 @@ export async function startTUI(): Promise<void> {
       } else if (currentView === 'build') {
         // Build view - command selection
         if (!isExecuting) {
+          const totalItems = Math.min(7, buildCommands.length) + 1; // +1 for Add option
           if (input === '\x1b[A') { // Up
             const oldIndex = selectedBuild;
             selectedBuild = Math.max(0, selectedBuild - 1);
             if (oldIndex !== selectedBuild) updateListSelection('build', oldIndex, selectedBuild);
           } else if (input === '\x1b[B') { // Down
             const oldIndex = selectedBuild;
-            selectedBuild = Math.min(Math.min(8, buildCommands.length) - 1, selectedBuild + 1);
+            selectedBuild = Math.min(totalItems - 1, selectedBuild + 1);
             if (oldIndex !== selectedBuild) updateListSelection('build', oldIndex, selectedBuild);
           } else if (input >= '1' && input <= '8') {
             // Number keys to select command
             const idx = parseInt(input) - 1;
-            if (idx >= 0 && idx < Math.min(8, buildCommands.length) && idx !== selectedBuild) {
+            if (idx >= 0 && idx < totalItems && idx !== selectedBuild) {
               const oldIndex = selectedBuild;
               selectedBuild = idx;
               updateListSelection('build', oldIndex, selectedBuild);
             }
           } else if (input === '\r' || input === '\n') {
-            // Enter to execute selected command
-            if (buildCommands.length > 0) {
+            // Check if selecting "Add" option
+            const addIndex = Math.min(7, buildCommands.length);
+            if (selectedBuild === addIndex) {
+              // Enter add command mode
+              currentView = 'build-add';
+              buildAddStep = 0;
+              buildAddName = '';
+              buildAddCommand = '';
+              buildAddDescription = '';
+              renderScreen();
+            } else if (buildCommands.length > 0) {
+              // Execute selected command
               const cmd = buildCommands[selectedBuild];
               isExecuting = true;
               renderScreen();
@@ -968,9 +1008,76 @@ export async function startTUI(): Promise<void> {
               currentView = 'main';
               renderScreen();
             }
+          } else if (input === 'd' || input === 'D') {
+            // Delete selected command (not the Add option)
+            const addIndex = Math.min(7, buildCommands.length);
+            if (selectedBuild < addIndex && buildCommands.length > 0) {
+              // Delete from config
+              const config = loadConfig() as any || {};
+              if (config.buildCommands) {
+                config.buildCommands.splice(selectedBuild, 1);
+                saveConfig(config);
+                // Reload and adjust selection
+                loadBuildCommands();
+                selectedBuild = Math.min(selectedBuild, Math.min(7, buildCommands.length));
+                renderScreen();
+              }
+            }
           }
-        }
-      } else if (currentView === 'ports') {
+          }
+        } else if (currentView === 'build-add') {
+          // Add command input handling
+          if (input === '\x1b') { // Esc - cancel
+            currentView = 'build';
+            loadBuildCommands();
+            renderScreen();
+          } else if (input === '\x1b[A') { // Up - previous field
+            buildAddStep = Math.max(0, buildAddStep - 1);
+            renderScreen();
+          } else if (input === '\x1b[B') { // Down - next field
+            buildAddStep = Math.min(2, buildAddStep + 1);
+            renderScreen();
+          } else if (input === '\r' || input === '\n') { // Enter - save
+            if (buildAddName && buildAddCommand) {
+              // Save new command to config
+              const config = loadConfig() as any || {};
+              if (!config.buildCommands) {
+                config.buildCommands = [];
+              }
+              config.buildCommands.push({
+                name: buildAddName,
+                command: buildAddCommand,
+                description: buildAddDescription || '',
+                isActive: false
+              });
+              saveConfig(config);
+              // Return to build view
+              currentView = 'build';
+              loadBuildCommands();
+              renderScreen();
+            }
+          } else if (input === '\x7f' || input === '\b') { // Backspace
+            // Remove last char from current field
+            if (buildAddStep === 0) {
+              buildAddName = buildAddName.slice(0, -1);
+            } else if (buildAddStep === 1) {
+              buildAddCommand = buildAddCommand.slice(0, -1);
+            } else {
+              buildAddDescription = buildAddDescription.slice(0, -1);
+            }
+          renderScreen();
+          } else if (input.length === 1 && input >= ' ') { // Regular char
+            // Add to current field
+            if (buildAddStep === 0) {
+              buildAddName += input;
+            } else if (buildAddStep === 1) {
+              buildAddCommand += input;
+            } else {
+              buildAddDescription += input;
+            }
+            renderScreen();
+          }
+        } else if (currentView === 'ports') {
         // Ports view
         if (!isExecuting) {
           if (input === 'r' || input === 'R') {
@@ -1075,6 +1182,16 @@ export async function startTUI(): Promise<void> {
             if (selectedThemeColor < 0) selectedThemeColor = 0;
             currentView = 'theme-select';
             renderScreen();
+          } else if (item.type === 'action') {
+            // Open config file with notepad
+            const configPath = findConfigPath();
+            if (configPath) {
+              spawn('notepad', [configPath], { detached: true, stdio: 'ignore' });
+            } else {
+              // Create default config in current directory
+              const defaultPath = process.cwd() + '/dove.json';
+              spawn('notepad', [defaultPath], { detached: true, stdio: 'ignore' });
+            }
           } else if (item.type === 'path') {
             // Enter edit mode for path settings
             editingSettingKey = item.key;
