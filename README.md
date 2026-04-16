@@ -6,7 +6,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-嵌入式固件编译和烧录 CLI 工具，支持多种芯片平台的固件开发流程。
+嵌入式固件编译和烧录CLI工具，支持多种芯片平台的固件开发流程。
 
 ## Features
 

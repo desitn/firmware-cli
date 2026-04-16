@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Build executable
+        run: npm run build:exe
+
+      - name: Create release package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release
+          Copy-Item dove.exe release/
+          Copy-Item -Recurse tools release/
+          Copy-Item -Recurse skill release/
+          Copy-Item README.md release/
+          Copy-Item install.ps1 release/
+          Copy-Item uninstall.ps1 release/
+
+      - name: Create ZIP
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME
+          Compress-Archive -Path release/* -DestinationPath dove-$version.zip
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dove-${{ github.ref_name }}.zip
+          generate_release_notes: true
