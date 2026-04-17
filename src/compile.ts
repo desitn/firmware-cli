@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import { findWorkspacePath, loadConfig, saveConfig, isWindows, getGlobalPaths } from './utils';
 
 /**
@@ -190,23 +190,63 @@ async function executeBuild(workspacePath: string, buildCommand: string, bashPat
   console.log(`\nExecuting: ${spawnCmd} ${spawnArgs.join(' ')}`);
   console.log('='.repeat(50));
 
-  // Use spawn with stdio: 'inherit' for real-time terminal output
+  // Use spawn with pipe mode so Node.js can catch Ctrl+C
+  // We'll forward output manually for real-time display
   await new Promise<void>((resolve, reject) => {
     const child = spawn(spawnCmd, spawnArgs, {
       cwd: workspacePath,
-      stdio: 'inherit',  // Direct terminal I/O
+      stdio: ['inherit', 'pipe', 'pipe'],  // stdin inherit, stdout/stderr pipe
       shell: false
     });
 
+    // Forward stdout in real-time
+    child.stdout?.on('data', (data: Buffer) => {
+      process.stdout.write(data);
+    });
+
+    // Forward stderr in real-time
+    child.stderr?.on('data', (data: Buffer) => {
+      process.stderr.write(data);
+    });
+
+    // Handle Ctrl+C: kill child process and its descendants
+    const handleSignal = () => {
+      console.log('\nBuild cancelled by user');
+      if (isWindows() && child.pid) {
+        // Use taskkill to kill process tree - execute synchronously
+        try {
+          execSync(`taskkill /pid ${child.pid} /t /f`, { stdio: 'inherit' });
+          console.log('All child processes terminated');
+        } catch (e) {
+          // taskkill may fail if process already exited
+        }
+      } else if (child.pid) {
+        process.kill(-child.pid, 'SIGTERM');
+      }
+      reject(new Error('Build cancelled by user'));
+    };
+
+    // Listen for interrupt signals (Ctrl+C)
+    process.on('SIGINT', handleSignal);
+    process.on('SIGTERM', handleSignal);
+
     child.on('close', (code) => {
+      // Remove signal handlers after child exits
+      process.removeListener('SIGINT', handleSignal);
+      process.removeListener('SIGTERM', handleSignal);
+
       if (code === 0) {
         resolve();
+      } else if (code === null) {
+        reject(new Error('Build cancelled by user'));
       } else {
         reject(new Error(`Build failed with exit code ${code}`));
       }
     });
 
     child.on('error', (err) => {
+      process.removeListener('SIGINT', handleSignal);
+      process.removeListener('SIGTERM', handleSignal);
       reject(new Error(`Build execution error: ${err.message}`));
     });
   });
