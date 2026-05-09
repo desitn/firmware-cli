@@ -1,0 +1,9 @@
+{
+  "id": "port-monitor",
+  "name": "monitor port",
+  "description": "监控串口日志并输出到文件或返回摘要",
+  "examples": ["dove.exe port monitor --timeout 30000 -o log.txt", "监控串口", "port monitor --timeout 30000"],
+  "riskLevel": "low",
+  "errorHandling": {"retries": 0, "backoffMs": 0, "timeoutMs": 300000, "idempotent": true},
+  "logging": {"level": "info", "audit": false}
+}

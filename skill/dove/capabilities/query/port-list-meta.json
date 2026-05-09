@@ -1,0 +1,9 @@
+{
+  "id": "port-list",
+  "name": "list ports",
+  "description": "列出串口与标签",
+  "examples": ["dove.exe port list", "列出串口", "列出串口列表"],
+  "riskLevel": "low",
+  "errorHandling": {"retries": 1, "backoffMs": 200, "timeoutMs": 10000, "idempotent": true},
+  "logging": {"level": "info", "audit": false}
+}

@@ -1,0 +1,9 @@
+{
+  "id": "build",
+  "name": "build project",
+  "description": "执行固件编译",
+  "examples": ["dove.exe build", "dove.exe build --name install", "编译工程", "build 固件"],
+  "riskLevel": "medium",
+  "errorHandling": {"retries": 1, "backoffMs": 500, "timeoutMs": 600000, "idempotent": false},
+  "logging": {"level": "info", "audit": true}
+}

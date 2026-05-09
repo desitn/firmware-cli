@@ -1,0 +1,9 @@
+{
+  "id": "build-list",
+  "name": "list build commands",
+  "description": "列出配置的编译命令",
+  "examples": ["dove.exe build --list", "列出编译命令", "build --list"],
+  "riskLevel": "low",
+  "errorHandling": {"retries": 1, "backoffMs": 200, "timeoutMs": 15000, "idempotent": true},
+  "logging": {"level": "info", "audit": false}
+}

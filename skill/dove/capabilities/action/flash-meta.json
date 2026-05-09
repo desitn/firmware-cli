@@ -1,0 +1,9 @@
+{
+  "id": "flash",
+  "name": "flash firmware",
+  "description": "烧录固件到设备",
+  "examples": ["dove.exe flash", "dove.exe flash C:\\firmware.bin", "烧录固件", "flash 固件", "烧录到设备"],
+  "riskLevel": "high",
+  "errorHandling": {"retries": 0, "backoffMs": 1000, "timeoutMs": 300000, "idempotent": false},
+  "logging": {"level": "info", "audit": true}
+}

@@ -10,7 +10,8 @@
     "build:watch": "tsc --watch",
     "build:exe": "npm run build && pkg . --targets node18-win-x64 --output ./dove.exe",
     "dev": "ts-node src/index.ts",
-    "clean": "rimraf dist"
+    "clean": "rimraf dist",
+    "skill-validate": "node tools/skill-validate.js"
   },
   "author": "destin.zhang@quectel.com",
   "license": "MIT",

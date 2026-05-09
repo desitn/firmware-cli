@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "required": ["id", "name", "description", "examples"],
+  "properties": {
+    "id": {"type": "string"},
+    "name": {"type": "string"},
+    "description": {"type": "string"},
+    "examples": {"type": "array", "items": {"type": "string"}},
+    "riskLevel": {"type": "string", "enum": ["low", "medium", "high"]},
+    "errorHandling": {
+      "type": "object",
+      "properties": {
+        "retries": {"type": "integer", "minimum": 0},
+        "backoffMs": {"type": "integer", "minimum": 0},
+        "timeoutMs": {"type": "integer", "minimum": 0},
+        "idempotent": {"type": "boolean"}
+      },
+      "required": ["retries", "timeoutMs"]
+    },
+    "logging": {
+      "type": "object",
+      "properties": {
+        "level": {"type": "string", "enum": ["info", "debug", "warn", "error"]},
+        "audit": {"type": "boolean"}
+      }
+    }
+  }
+}

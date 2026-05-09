@@ -1,0 +1,9 @@
+{
+  "id": "config",
+  "name": "show config",
+  "description": "查看当前 dove 配置",
+  "examples": ["dove.exe config", "查看配置", "config"],
+  "riskLevel": "low",
+  "errorHandling": {"retries": 0, "backoffMs": 0, "timeoutMs": 5000, "idempotent": true},
+  "logging": {"level": "info", "audit": false}
+}

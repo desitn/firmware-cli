@@ -1,0 +1,9 @@
+{
+  "id": "flash-list",
+  "name": "list firmwares",
+  "description": "列出可用固件",
+  "examples": ["dove.exe flash --list", "列出固件", "flash --list"],
+  "riskLevel": "low",
+  "errorHandling": {"retries": 1, "backoffMs": 200, "timeoutMs": 15000, "idempotent": true},
+  "logging": {"level": "info", "audit": false}
+}

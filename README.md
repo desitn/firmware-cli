@@ -94,9 +94,9 @@ dove tui
 
 配置后，Claude Code 可通过自然语言执行 dove 命令：
 - 查询类命令（列出固件、串口、AT 查询）可直接执行
-- 操作类命令（烧录、编译、复位）需先确认风险
+- 执行类命令（烧录、编译、复位）默认不强制交互确认；每个 intent 提供 errorHandling 与 riskLevel 元数据以控制重试/超时与审计策略，调用方可在 UI 中提示高风险项。
 
-详见 `skill/dove-action/SKILL.md` 和 `skill/dove-query/SKILL.md`。
+详见 `skill/dove/SKILL.md` 与 `skill/dove/capabilities/`。
 
 ## 目录结构
 

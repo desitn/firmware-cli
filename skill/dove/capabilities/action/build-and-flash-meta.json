@@ -1,0 +1,9 @@
+{
+  "id": "build-and-flash",
+  "name": "build and flash",
+  "description": "组合编译并烧录",
+  "examples": ["dove.exe build-and-flash", "一键编译并烧录"],
+  "riskLevel": "high",
+  "errorHandling": {"retries": 0, "backoffMs": 0, "timeoutMs": 900000, "idempotent": false},
+  "logging": {"level": "info", "audit": true}
+}

@@ -1,0 +1,9 @@
+{
+  "id": "port-at",
+  "name": "send at command",
+  "description": "发送 AT 查询或执行 AT 操作（取决于参数）",
+  "examples": ["dove.exe port at -c \"ATI\"", "发送 AT", "查询设备信息", "AT+CGMI"],
+  "riskLevel": "medium",
+  "errorHandling": {"retries": 1, "backoffMs": 500, "timeoutMs": 30000, "idempotent": true},
+  "logging": {"level": "info", "audit": true}
+}
