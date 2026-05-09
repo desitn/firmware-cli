@@ -5,7 +5,7 @@ import { listFirmware } from './list';
 import { compileFirmware, listBuildCommands, setConfig, showConfig } from './compile';
 import { loadToolsConfig, loadConfig, initWorkspaceConfig } from './utils';
 import { showSerialList, openAndMonitorPort, sendATCommandCLI } from './serial';
-import type { MonitorOptions, CLIConfig, ComPortConfig, PortTag } from './types';
+import type { MonitorOptions, CLIConfig, ComPortConfig, PortTag, PortListInfo } from './types';
 
 /**
  * Get tag from port config
@@ -250,11 +250,23 @@ async function handlePortList(args: string[]): Promise<number> {
 
   if (listUsb && listSerial) {
     // Combine both into single JSON output
-    await listDevices({ json: true, returnResult: true });
-    await showSerialList({ json: true });
+    const usbResult = await listDevices({ json: true, returnResult: true }) as string;
+    const serialResult = await showSerialList({ json: true, returnResult: true }) as PortListInfo[];
+
+    // Parse and merge results
+    const usbData = JSON.parse(usbResult);
+    const combined = {
+      usbDevices: usbData.devices || [],
+      ports: serialResult,
+      usbCount: usbData.count || 0,
+      portCount: serialResult.length
+    };
+    console.log(JSON.stringify(combined, null, 2));
   } else if (listUsb) {
-    await listDevices({ json: true, returnResult: true });
+    // USB only - use json: true to print to stdout (not returnResult)
+    await listDevices({ json: true });
   } else if (listSerial) {
+    // Serial only
     await showSerialList({ json: true });
   }
 

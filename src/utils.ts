@@ -299,22 +299,17 @@ export function getProjectRoot(): string {
 
 /**
  * Find workspace path
- * Priority: 1. Config file workspacePath 2. Config file firmwarePath parent 3. dove.json directory
+ * Priority: 1. Config file workspacePath 2. Current working directory (default)
  */
-export function findWorkspacePath(): string | null {
+export function findWorkspacePath(): string {
   // First, try to get workspace path from config file
   const config = loadConfig();
   if (config.workspacePath && fs.existsSync(config.workspacePath)) {
     return config.workspacePath;
   }
 
-  // Second, use the directory containing dove.json as workspace
-  const configPath = findConfigPath();
-  if (configPath) {
-    return path.dirname(configPath);
-  }
-
-  return null;
+  // Default: use current working directory
+  return process.cwd();
 }
 
 /**
@@ -526,8 +521,7 @@ export function determineFirmwareType(fileOrPath: string): FirmwareTypeResult {
  * Find dove.json config file path
  * Priority:
  *   1. Environment variable FIRMWARE_CLI_CONFIG
- *   2. Current working directory/dove.json
- *   3. Current working directory/.dove/dove.json
+ *   2. Current working directory/.dove/dove.json (统一路径)
  */
 export function findConfigPath(): string | null {
   // First, check environment variable
@@ -538,13 +532,7 @@ export function findConfigPath(): string | null {
 
   const cwd = process.cwd();
 
-  // Check dove.json in current working directory
-  const configPath = path.join(cwd, 'dove.json');
-  if (fs.existsSync(configPath)) {
-    return configPath;
-  }
-
-  // Check .dove/dove.json in current working directory
+  // 统一配置路径: .dove/dove.json
   const doveConfigPath = path.join(cwd, '.dove', 'dove.json');
   if (fs.existsSync(doveConfigPath)) {
     return doveConfigPath;
@@ -621,12 +609,18 @@ export function loadConfig(): CLIConfig {
 
 /**
  * Save configuration file
+ * Always saves to .dove/dove.json
  */
 export function saveConfig(config: CLIConfig): void {
   let configPath = findConfigPath();
   if (!configPath) {
-    // If no config found, create in current directory
-    configPath = path.join(process.cwd(), 'dove.json');
+    // Create .dove/dove.json
+    const cwd = process.cwd();
+    const doveDir = path.join(cwd, '.dove');
+    if (!fs.existsSync(doveDir)) {
+      fs.mkdirSync(doveDir, { recursive: true });
+    }
+    configPath = path.join(doveDir, 'dove.json');
   }
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 }

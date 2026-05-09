@@ -23,10 +23,6 @@ export async function compileFirmware(commandIdentifier: string | null = null): 
     console.log('='.repeat(50));
     
     const workspacePath = findWorkspacePath();
-    if (!workspacePath) {
-      throw new Error('Workspace not found, please run from project root');
-    }
-    
     console.log(`Workspace: ${workspacePath}`);
     
     const config = loadConfig();

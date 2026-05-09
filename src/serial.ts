@@ -428,7 +428,7 @@ export async function enterDownloadMode(
 /**
  * Show serial port list
  */
-export async function showSerialList(options: { json?: boolean; plain?: boolean } = {}): Promise<PortListInfo[] | string> {
+export async function showSerialList(options: { json?: boolean; plain?: boolean; returnResult?: boolean } = {}): Promise<PortListInfo[] | string> {
   const ports = await listSerialPorts();
 
   // Load user-defined tags from dove.json
@@ -444,6 +444,10 @@ export async function showSerialList(options: { json?: boolean; plain?: boolean 
       friendlyName: port.friendlyName
     };
   }).filter(port => port.tag !== 'Invalid' && port.path !== 'COM1');
+
+  if (options.returnResult) {
+    return portsWithTags;
+  }
 
   if (options.json) {
     console.log(JSON.stringify({ ports: portsWithTags, count: portsWithTags.length }, null, 2));

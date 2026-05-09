@@ -603,9 +603,9 @@ function renderScreen(fullClear: boolean = false): void {
     process.stdout.write('\x1b[H');
   }
 
-  const workspace = findWorkspacePath() || 'not found';
+  const workspace = findWorkspacePath();
   // Extract only the last folder name for display
-  const workspaceName = workspace !== 'not found' ? workspace.split(/[\\/]/).pop() || workspace : 'not found';
+  const workspaceName = workspace.split(/[\\/]/).pop() || workspace;
   const config = loadConfig() as any || {};
   const termWidth = getTerminalWidth();
 
